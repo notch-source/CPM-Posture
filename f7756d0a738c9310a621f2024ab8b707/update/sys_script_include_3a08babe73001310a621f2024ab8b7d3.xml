@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_1929776_compli_0.CPMNotify</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description/>
+        <mobile_callable>false</mobile_callable>
+        <name>CPMNotify</name>
+        <sandbox_callable>false</sandbox_callable>
+        <script><![CDATA[// Role: builds the emails. Nightly it queues one reminder per owner; the text itself is built when the
+//       email is sent, so events only carry a recipient and a date.
+var CPMNotify = Class.create();
+CPMNotify.prototype = {
+  DIGEST_EVENT: 'x_1929776_compli_0.owner.digest',
+
+  initialize: function() {
+    this.util = new CPMUtil();
+  },
+
+  // Role: nightly entry point. Queues one reminder event for each owner who has something to act on.
+  run: function() {
+    var day = this.util.today();
+    var owners = {};
+    this._sections(day).forEach(function(section) {
+      var ga = new GlideAggregate('x_1929776_compli_0_mapping');
+      ga.addEncodedQuery(section.query);
+      ga.addNotNullQuery('owner');
+      ga.addAggregate('COUNT');
+      ga.groupBy('owner');
+      ga.query();
+      while (ga.next()) owners[ga.getValue('owner')] = true;
+    });
+    Object.keys(owners).forEach(function(ownerId) {
+      var user = new GlideRecord('sys_user');
+      if (user.get(ownerId)) gs.eventQueue(this.DIGEST_EVENT, user, ownerId, day);
+    }, this);
+  },
+
+  // Role: defines what a reminder can contain: a title and a query on mappings per section.
+  //       No "already notified" flags are needed, because every section depends on a date.
+  _sections: function(day) {
+    var soon = [this.util.intProp('warning_days', 30), 7, 1]
+      .map(function(n) { return this.util.addDays(day, n); }, this).join(',');
+    var yesterday = this.util.addDays(day, -1);
+    var sections = [
+      { title: 'New controls assigned to you', query: 'active=true^state=missing^sys_created_on>=' + yesterday + ' 00:00:00' },
+      { title: 'Evidence expiring soon', query: 'active=true^state=approved^valid_untilIN' + soon },
+      { title: 'Evidence that expired yesterday', query: 'active=true^state=expired^valid_until=' + yesterday }
+    ];
+    // Every Monday the whole list of open items is repeated.
+    if (new GlideDateTime(day + ' 00:00:00').getDayOfWeekUTC() == 1)
+      sections.push({ title: 'Still open', query: 'active=true^stateINmissing,rejected,expired' });
+    return sections;
+  },
+
+  // Role: the body of an owner's reminder: one table per non-empty section.
+  ownerDigest: function(ownerId, day) {
+    var html = '';
+    this._sections(day).forEach(function(section) {
+      html += this._table(section.title, this._rows(section.query + '^owner=' + ownerId));
+    }, this);
+    return html + this._link('Open your compliance dashboard');
+  },
+
+  // Role: the body of the email sent when the team rejects a submission.
+  rejection: function(evidence) {
+    return '<p><b>Evidence insufficient, please re-upload.</b></p>' +
+      '<p>' + this._esc(evidence.mapping.target.getDisplayValue()) + ' · ' + this._esc(evidence.mapping.control.name + '') + '<br>' +
+      'Reviewer comment: ' + this._esc(evidence.getValue('review_comment')) + '</p>' +
+      this._link('Open the page and upload new evidence', evidence.mapping.target + '');
+  },
+
+  // Role: the body of the email sent to the compliance team when an owner submits evidence.
+  submitted: function(evidence) {
+    return '<p>New evidence is waiting for review.</p>' +
+      '<p>' + this._esc(evidence.mapping.target.getDisplayValue()) + ' · ' + this._esc(evidence.mapping.control.name + '') + '<br>' +
+      'Submitted by ' + this._esc(evidence.getDisplayValue('submitted_by')) + '</p>' +
+      this._link('Open the review inbox');
+  },
+
+  // Role: lists the mappings that match a query, as simple rows.
+  _rows: function(query) {
+    var rows = [];
+    var gr = new GlideRecord('x_1929776_compli_0_mapping');
+    gr.addEncodedQuery(query);
+    gr.orderBy('target');
+    gr.setLimit(50);
+    gr.query();
+    while (gr.next()) {
+      rows.push({ target: gr.getDisplayValue('target'), control: gr.control.name + '', state: gr.getDisplayValue('state'), until: gr.getValue('valid_until') || '' });
+    }
+    return rows;
+  },
+
+  // Role: draws a titled HTML table, or nothing when there are no rows.
+  _table: function(title, rows) {
+    if (!rows.length) return '';
+    var html = '<p><b>' + this._esc(title) + '</b></p><table cellpadding="6" style="border-collapse:collapse">' +
+      '<tr><th align="left">Service or CI</th><th align="left">Control</th><th align="left">Status</th><th align="left">Valid until</th></tr>';
+    rows.forEach(function(r) {
+      html += '<tr><td>' + this._esc(r.target) + '</td><td>' + this._esc(r.control) + '</td><td>' + this._esc(r.state) +
+              '</td><td>' + this._esc(r.until) + '</td></tr>';
+    }, this);
+    return html + '</table>';
+  },
+
+  // Role: a link to the portal, optionally to the page of one CI or service.
+  _link: function(text, targetId) {
+    return '<p><a href="' + gs.getProperty('glide.servlet.uri') + 'sp?id=cpm' + (targetId ? '&target=' + targetId : '') + '">' + text + '</a></p>';
+  },
+
+  _esc: function(text) {
+    return GlideStringUtil.escapeHTML(text || '');
+  },
+
+  type: 'CPMNotify'
+};]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-10-24 11:51:18</sys_created_on>
+        <sys_id>3a08babe73001310a621f2024ab8b7d3</sys_id>
+        <sys_mod_count>5</sys_mod_count>
+        <sys_name>CPMNotify</sys_name>
+        <sys_package display_value="Compliance Posture Mapper" source="x_1929776_compli_0">f7756d0a738c9310a621f2024ab8b707</sys_package>
+        <sys_policy>read</sys_policy>
+        <sys_scope display_value="Compliance Posture Mapper">f7756d0a738c9310a621f2024ab8b707</sys_scope>
+        <sys_update_name>sys_script_include_3a08babe73001310a621f2024ab8b7d3</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-10-27 16:46:47</sys_updated_on>
+    </sys_script_include>
+</record_update>

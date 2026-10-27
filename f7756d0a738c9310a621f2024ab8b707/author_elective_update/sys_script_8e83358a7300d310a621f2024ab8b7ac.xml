@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update sys_domain="global" table="sys_script">
+    <sys_script action="DELETE">
+        <abort_action>false</abort_action>
+        <access>package_private</access>
+        <action_delete>true</action_delete>
+        <action_insert>true</action_insert>
+        <action_query>false</action_query>
+        <action_update>true</action_update>
+        <active>true</active>
+        <add_message>false</add_message>
+        <advanced>true</advanced>
+        <change_fields>false</change_fields>
+        <client_callable>false</client_callable>
+        <collection>x_1929776_compli_0_mapping</collection>
+        <condition/>
+        <description/>
+        <execute_function>false</execute_function>
+        <filter_condition/>
+        <is_rest>false</is_rest>
+        <message/>
+        <name>Recalculate from mapping</name>
+        <order>100</order>
+        <priority>100</priority>
+        <rest_method/>
+        <rest_method_text/>
+        <rest_service/>
+        <rest_service_text/>
+        <rest_variables/>
+        <role_conditions/>
+        <script><![CDATA[(function executeRule(current, previous) {
+  var util = new CPMPostureUtil();
+  util.recalculateService(current.getValue('business_service'));
+  if (previous && previous.getValue('business_service') &&
+      previous.getValue('business_service') != current.getValue('business_service'))
+    util.recalculateService(previous.getValue('business_service'));
+})(current, previous);]]></script>
+        <sys_class_name>sys_script</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-10-21 22:56:42</sys_created_on>
+        <sys_domain>global</sys_domain>
+        <sys_domain_path>/</sys_domain_path>
+        <sys_id>8e83358a7300d310a621f2024ab8b7ac</sys_id>
+        <sys_mod_count>2</sys_mod_count>
+        <sys_name>Recalculate from mapping</sys_name>
+        <sys_overrides/>
+        <sys_package display_value="Compliance Posture Mapper" source="x_1929776_compli_0">f7756d0a738c9310a621f2024ab8b707</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Compliance Posture Mapper">f7756d0a738c9310a621f2024ab8b707</sys_scope>
+        <sys_update_name>sys_script_8e83358a7300d310a621f2024ab8b7ac</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-10-21 23:50:48</sys_updated_on>
+        <template/>
+        <when>after</when>
+    </sys_script>
+    <sys_translated_text action="DELETE" query="documentkey=8e83358a7300d310a621f2024ab8b7ac"/>
+    <sys_update_version action="INSERT_OR_UPDATE">
+        <action>DELETE</action>
+        <application display_value="Compliance Posture Mapper">f7756d0a738c9310a621f2024ab8b707</application>
+        <file_path/>
+        <instance_id>d0c76825ebca8b98e9bbfddacad0cd41</instance_id>
+        <instance_name>dev433816</instance_name>
+        <merge_base/>
+        <name>sys_script_8e83358a7300d310a621f2024ab8b7ac</name>
+        <payload>&lt;?xml version="1.0" encoding="UTF-8"?&gt;&lt;record_update sys_domain="global" table="sys_script"&gt;&lt;sys_script action="INSERT_OR_UPDATE"&gt;&lt;abort_action&gt;false&lt;/abort_action&gt;&lt;access&gt;package_private&lt;/access&gt;&lt;action_delete&gt;true&lt;/action_delete&gt;&lt;action_insert&gt;true&lt;/action_insert&gt;&lt;action_query&gt;false&lt;/action_query&gt;&lt;action_update&gt;true&lt;/action_update&gt;&lt;active&gt;true&lt;/active&gt;&lt;add_message&gt;false&lt;/add_message&gt;&lt;advanced&gt;true&lt;/advanced&gt;&lt;change_fields&gt;false&lt;/change_fields&gt;&lt;client_callable&gt;false&lt;/client_callable&gt;&lt;collection&gt;x_1929776_compli_0_mapping&lt;/collection&gt;&lt;condition/&gt;&lt;description/&gt;&lt;execute_function&gt;false&lt;/execute_function&gt;&lt;filter_condition/&gt;&lt;is_rest&gt;false&lt;/is_rest&gt;&lt;message/&gt;&lt;name&gt;Recalculate from mapping&lt;/name&gt;&lt;order&gt;100&lt;/order&gt;&lt;priority&gt;100&lt;/priority&gt;&lt;rest_method/&gt;&lt;rest_method_text/&gt;&lt;rest_service/&gt;&lt;rest_service_text/&gt;&lt;rest_variables/&gt;&lt;role_conditions/&gt;&lt;script&gt;&lt;![CDATA[(function executeRule(current, previous) {
+  var util = new CPMPostureUtil();
+  util.recalculateService(current.getValue('business_service'));
+  if (previous &amp;&amp; previous.getValue('business_service') &amp;&amp;
+      previous.getValue('business_service') != current.getValue('business_service'))
+    util.recalculateService(previous.getValue('business_service'));
+})(current, previous);]]&gt;&lt;/script&gt;&lt;sys_class_name&gt;sys_script&lt;/sys_class_name&gt;&lt;sys_created_by&gt;admin&lt;/sys_created_by&gt;&lt;sys_created_on&gt;2026-10-21 22:56:42&lt;/sys_created_on&gt;&lt;sys_domain&gt;global&lt;/sys_domain&gt;&lt;sys_domain_path&gt;/&lt;/sys_domain_path&gt;&lt;sys_id&gt;8e83358a7300d310a621f2024ab8b7ac&lt;/sys_id&gt;&lt;sys_mod_count&gt;2&lt;/sys_mod_count&gt;&lt;sys_name&gt;Recalculate from mapping&lt;/sys_name&gt;&lt;sys_overrides/&gt;&lt;sys_package display_value="Compliance Posture Mapper" source="x_1929776_compli_0"&gt;f7756d0a738c9310a621f2024ab8b707&lt;/sys_package&gt;&lt;sys_policy/&gt;&lt;sys_scope display_value="Compliance Posture Mapper"&gt;f7756d0a738c9310a621f2024ab8b707&lt;/sys_scope&gt;&lt;sys_update_name&gt;sys_script_8e83358a7300d310a621f2024ab8b7ac&lt;/sys_update_name&gt;&lt;sys_updated_by&gt;admin&lt;/sys_updated_by&gt;&lt;sys_updated_on&gt;2026-10-21 23:50:48&lt;/sys_updated_on&gt;&lt;template/&gt;&lt;when&gt;after&lt;/when&gt;&lt;/sys_script&gt;&lt;sys_translated_text action="delete_multiple" query="documentkey=8e83358a7300d310a621f2024ab8b7ac"/&gt;&lt;/record_update&gt;</payload>
+        <payload_hash>1831118250</payload_hash>
+        <record_name>Recalculate from mapping</record_name>
+        <reverted_from/>
+        <source>c8856d0a738c9310a621f2024ab8b710</source>
+        <source_table>sys_update_set</source_table>
+        <state>previous</state>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-10-21 23:50:49</sys_created_on>
+        <sys_id>00100ac67380d310a621f2024ab8b776</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_recorded_at>1a160dfe87b0000001</sys_recorded_at>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-10-21 23:50:49</sys_updated_on>
+        <type>Business Rule</type>
+        <update_guid>c8100ac6aa80d3104e27249a6962a174</update_guid>
+        <update_guid_history>c8100ac6aa80d3104e27249a6962a174:1831118250,75a43d4ed000d310bd568c715e42443f:-1634049315,73a339caf800d310e4db9674f7dd83d5:949052360</update_guid_history>
+    </sys_update_version>
+    <sys_metadata_delete action="INSERT_OR_UPDATE">
+        <sys_audit_delete/>
+        <sys_class_name>sys_metadata_delete</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-10-22 23:53:16</sys_created_on>
+        <sys_db_object display_value="" name="sys_script">sys_script</sys_db_object>
+        <sys_id>00f9e57ea6ef4a23804c37b0e51eb3f9</sys_id>
+        <sys_metadata>8e83358a7300d310a621f2024ab8b7ac</sys_metadata>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>Recalculate from mapping</sys_name>
+        <sys_package display_value="Compliance Posture Mapper" source="x_1929776_compli_0">f7756d0a738c9310a621f2024ab8b707</sys_package>
+        <sys_parent display_value="">5b9a2d0673cc9310a621f2024ab8b71a</sys_parent>
+        <sys_policy/>
+        <sys_scope display_value="Compliance Posture Mapper">f7756d0a738c9310a621f2024ab8b707</sys_scope>
+        <sys_scope_delete display_value="">01361efd492541088029ed23d04a1640</sys_scope_delete>
+        <sys_update_name>sys_script_8e83358a7300d310a621f2024ab8b7ac</sys_update_name>
+        <sys_update_version display_value="sys_script_8e83358a7300d310a621f2024ab8b7ac">00100ac67380d310a621f2024ab8b776</sys_update_version>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-10-22 23:53:16</sys_updated_on>
+    </sys_metadata_delete>
+</record_update>

@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sp_page">
+    <sp_page action="DELETE">
+        <category>custom</category>
+        <css/>
+        <draft>false</draft>
+        <dynamic_title_structure/>
+        <human_readable_url_structure/>
+        <id>cpm_service</id>
+        <internal>false</internal>
+        <omit_watcher>false</omit_watcher>
+        <public>true</public>
+        <roles/>
+        <seo_script/>
+        <short_description/>
+        <sys_class_name>sp_page</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-10-22 15:14:16</sys_created_on>
+        <sys_id>c22351de73c81710a621f2024ab8b728</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>cpm_service</sys_name>
+        <sys_package display_value="Compliance Posture Mapper" source="x_1929776_compli_0">f7756d0a738c9310a621f2024ab8b707</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Compliance Posture Mapper">f7756d0a738c9310a621f2024ab8b707</sys_scope>
+        <sys_update_name>sp_page_c22351de73c81710a621f2024ab8b728</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-10-22 15:14:16</sys_updated_on>
+        <title>CPM service</title>
+        <use_seo_script>false</use_seo_script>
+    </sp_page>
+    <sys_translated_text action="DELETE" query="documentkey=c22351de73c81710a621f2024ab8b728"/>
+    <sys_update_version action="INSERT_OR_UPDATE">
+        <action>DELETE</action>
+        <application display_value="Compliance Posture Mapper">f7756d0a738c9310a621f2024ab8b707</application>
+        <file_path/>
+        <instance_id>d0c76825ebca8b98e9bbfddacad0cd41</instance_id>
+        <instance_name>dev433816</instance_name>
+        <merge_base/>
+        <name>sp_page_c22351de73c81710a621f2024ab8b728</name>
+        <payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sp_page"><sp_page action="INSERT_OR_UPDATE"><category>custom</category><css/><draft>false</draft><dynamic_title_structure/><human_readable_url_structure/><id>cpm_service</id><internal>false</internal><omit_watcher>false</omit_watcher><public>true</public><roles/><seo_script/><short_description/><sys_class_name>sp_page</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-10-22 15:14:16</sys_created_on><sys_id>c22351de73c81710a621f2024ab8b728</sys_id><sys_mod_count>0</sys_mod_count><sys_name>cpm_service</sys_name><sys_package display_value="Compliance Posture Mapper" source="x_1929776_compli_0">f7756d0a738c9310a621f2024ab8b707</sys_package><sys_policy/><sys_scope display_value="Compliance Posture Mapper">f7756d0a738c9310a621f2024ab8b707</sys_scope><sys_update_name>sp_page_c22351de73c81710a621f2024ab8b728</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-10-22 15:14:16</sys_updated_on><title>CPM service</title><use_seo_script>false</use_seo_script></sp_page><sys_translated_text action="delete_multiple" query="documentkey=c22351de73c81710a621f2024ab8b728"/></record_update>]]></payload>
+        <payload_hash>1786691164</payload_hash>
+        <record_name>cpm_service</record_name>
+        <reverted_from/>
+        <source>c8856d0a738c9310a621f2024ab8b710</source>
+        <source_table>sys_update_set</source_table>
+        <state>previous</state>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-10-22 15:14:17</sys_created_on>
+        <sys_id>a36399de73c81710a621f2024ab8b705</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_recorded_at>1a1642d60a40000001</sys_recorded_at>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-10-22 15:14:17</sys_updated_on>
+        <type>Page</type>
+        <update_guid>636399deacc81710eb7f2240058a9804</update_guid>
+        <update_guid_history>636399deacc81710eb7f2240058a9804:1786691164</update_guid_history>
+    </sys_update_version>
+    <sys_metadata_delete action="INSERT_OR_UPDATE">
+        <sys_audit_delete display_value="cpm_service">2e2ac3f273c01310a621f2024ab8b7ba</sys_audit_delete>
+        <sys_class_name>sys_metadata_delete</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-10-24 13:10:02</sys_created_on>
+        <sys_db_object display_value="" name="sp_page">sp_page</sys_db_object>
+        <sys_id>3398b95c289a490c8fae12156f06dd90</sys_id>
+        <sys_metadata>c22351de73c81710a621f2024ab8b728</sys_metadata>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>cpm_service</sys_name>
+        <sys_package display_value="Compliance Posture Mapper" source="x_1929776_compli_0">f7756d0a738c9310a621f2024ab8b707</sys_package>
+        <sys_parent/>
+        <sys_policy/>
+        <sys_scope display_value="Compliance Posture Mapper">f7756d0a738c9310a621f2024ab8b707</sys_scope>
+        <sys_scope_delete display_value="">01361efd492541088029ed23d04a1640</sys_scope_delete>
+        <sys_update_name>sp_page_c22351de73c81710a621f2024ab8b728</sys_update_name>
+        <sys_update_version display_value="sp_page_c22351de73c81710a621f2024ab8b728">a36399de73c81710a621f2024ab8b705</sys_update_version>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-10-24 13:10:02</sys_updated_on>
+    </sys_metadata_delete>
+</record_update>

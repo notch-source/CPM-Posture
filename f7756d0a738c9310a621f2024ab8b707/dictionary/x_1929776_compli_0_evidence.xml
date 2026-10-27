@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?><database>
+    <element attributes="enforce_dot_walk_cross_scope_access=true" db_object_id="149c654a73cc9310a621f2024ab8b7c0" label="Evidence" max_length="40" name="x_1929776_compli_0_evidence" type="collection">
+        <element label="Reviewed on" max_length="40" name="reviewed_on" type="glide_date_time"/>
+        <element label="Reviewed by" max_length="32" name="review_by" reference="sys_user" type="reference"/>
+        <element label="Submitted by" max_length="32" name="submitted_by" reference="sys_user" type="reference"/>
+        <element choice="3" default="pending" label="Status" max_length="40" name="status" type="choice">
+            <choice>
+                <element inactive_on_update="false" label="Draft" sequence="4" value="draft"/>
+                <element inactive_on_update="false" label="Rejected" sequence="2" value="rejected"/>
+                <element inactive_on_update="false" label="Superseded" sequence="3" value="superseded"/>
+                <element inactive_on_update="false" label="Pending" sequence="0" value="pending"/>
+                <element inactive_on_update="false" label="Approved" sequence="1" value="approved"/>
+            </choice>
+        </element>
+        <element label="Uploaded by" max_length="32" name="uploaded_by" reference="sys_user" type="reference"/>
+        <element label="Attachements" max_length="40" name="attachements" type="string"/>
+        <element label="Mapping" max_length="32" name="mapping" reference="x_1929776_compli_0_mapping" type="reference"/>
+        <element label="Title" mandatory="true" max_length="40" name="title" type="string"/>
+        <element choice="1" label="State" max_length="255" name="state" read_only="true" read_only_option="strict_read_only" type="choice">
+            <choice>
+                <element inactive_on_update="false" label="expiring" sequence="1" value="expiring"/>
+                <element inactive_on_update="false" label="valid" sequence="0" value="valid"/>
+                <element inactive_on_update="false" label="archieved" sequence="3" value="archieved"/>
+                <element inactive_on_update="false" label="expired" sequence="2" value="expired"/>
+            </choice>
+        </element>
+        <element label="Valid until" mandatory="true" max_length="255" name="valid_until" type="glide_date"/>
+        <element label="Review comment" max_length="1000" name="review_comment" type="string"/>
+        <element label="Collected on" max_length="255" name="collected_on" type="glide_date"/>
+        <element attributes="edge_encryption_enabled=true" default="javascript:global.getNextObjNumberPadded();" label="Number" max_length="40" name="number" type="string"/>
+        <element label="Submitted on" max_length="40" name="submitted_on" type="glide_date_time"/>
+        <element choice="1" label="Soure" max_length="255" name="soure" type="choice">
+            <choice>
+                <element inactive_on_update="false" label="manual" sequence="0" value="manual"/>
+                <element inactive_on_update="false" label="api" sequence="2" value="api"/>
+                <element inactive_on_update="false" label="portal" sequence="1" value="portal"/>
+            </choice>
+        </element>
+        <index name="index">
+            <element name="mapping"/>
+        </index>
+        <index name="index2">
+            <element name="review_by"/>
+        </index>
+        <index name="index3">
+            <element name="submitted_by"/>
+        </index>
+        <index name="index4">
+            <element name="uploaded_by"/>
+        </index>
+    </element>
+</database>

@@ -1,0 +1,252 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sp_widget">
+    <sp_widget action="DELETE">
+        <category>custom</category>
+        <client_script><![CDATA[api.controller=function() {
+  /* widget controller */
+  var c = this;
+};]]></client_script>
+        <controller_as>c</controller_as>
+        <css/>
+        <data_table>sp_instance</data_table>
+        <demo_data/>
+        <description/>
+        <docs/>
+        <field_list/>
+        <has_preview>false</has_preview>
+        <id>cpm_service_360</id>
+        <internal>false</internal>
+        <link><![CDATA[function link(scope, element, attrs, controller) {
+  
+}]]></link>
+        <name>CPM Service 360</name>
+        <option_schema/>
+        <public>false</public>
+        <roles/>
+        <script><![CDATA[(function() {
+  var pid = $sp.getParameter('sys_id');           // posture row sys_id
+  var p = new GlideRecordSecure('x_1929776_compli_0_service_posture');
+  if (!pid || !p.get(pid)) { data.error = 'Service not found'; return; }
+
+  data.service = {
+    name: p.business_service.getDisplayValue(),
+    owner: p.business_service.managed_by.getDisplayValue() || 'Unassigned',
+    risk: p.getValue('risk_level'),
+    coverage: parseInt(p.getValue('coverage_pct'), 10),
+    implemented: parseInt(p.getValue('implemented_pct'), 10),
+    total: parseInt(p.getValue('total_controls'), 10),
+    last: p.getDisplayValue('last_calculated')
+  };
+  var svcId = p.getValue('business_service');
+
+  data.mappings = []; data.gaps = [];
+  var m = new GlideRecordSecure('x_1929776_compli_0_mapping');
+  m.addQuery('business_service', svcId);
+  m.orderBy('control');
+  m.query();
+  while (m.next()) {
+    var item = { sys_id: m.getUniqueValue(),
+                 control: m.control.getDisplayValue(),
+                 ref: m.control.getValue('control_reference') || '',
+                 framework: m.control.getDisplayValue('framework'),
+                 status: m.getDisplayValue('implementation_status'),
+                 owner: m.owner.getDisplayValue() || '—',
+                 evidence: [], flag: 'missing' };
+
+    var ev = new GlideRecordSecure('x_1929776_compli_0_evidence');
+    ev.addQuery('mapping', m.getUniqueValue());
+    ev.orderByDesc('valid_until');
+    ev.query();
+    while (ev.next()) {
+      var files = [];
+      var att = new GlideRecord('sys_attachment');
+      att.addQuery('table_name', 'x_1929776_compli_0_evidence');
+      att.addQuery('table_sys_id', ev.getUniqueValue());
+      att.query();
+      while (att.next())
+        files.push({ name: att.getValue('file_name'),
+                     link: '/sys_attachment.do?sys_id=' + att.getUniqueValue() });
+      item.evidence.push({ title: ev.getDisplayValue(), state: ev.getValue('state'),
+                           until: ev.getDisplayValue('valid_until'), files: files });
+      if (ev.getValue('state') == 'valid') item.flag = 'ok';
+      else if (ev.getValue('state') == 'expiring' && item.flag != 'ok') item.flag = 'expiring';
+      else if (ev.getValue('state') == 'expired' && item.flag == 'missing') item.flag = 'expired';
+    }
+    if (item.flag != 'ok') data.gaps.push(item.control + ' — ' + item.flag);
+    data.mappings.push(item);
+  }
+})();]]></script>
+        <servicenow>false</servicenow>
+        <sys_class_name>sp_widget</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-10-22 15:17:10</sys_created_on>
+        <sys_id>a0b399de73c81710a621f2024ab8b708</sys_id>
+        <sys_mod_count>2</sys_mod_count>
+        <sys_name>CPM Service 360</sys_name>
+        <sys_package display_value="Compliance Posture Mapper" source="x_1929776_compli_0">f7756d0a738c9310a621f2024ab8b707</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Compliance Posture Mapper">f7756d0a738c9310a621f2024ab8b707</sys_scope>
+        <sys_update_name>sp_widget_a0b399de73c81710a621f2024ab8b708</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-10-22 15:28:39</sys_updated_on>
+        <template><![CDATA[<div class="panel panel-default">
+  <div class="panel-heading">
+    <h3>{{data.service.name}}
+      <span class="label" ng-class="{'label-success': data.service.risk=='green',
+        'label-warning': data.service.risk=='yellow', 'label-danger': data.service.risk=='red',
+        'label-default': data.service.risk=='not_assessed'}">{{data.service.risk}}</span></h3>
+    <small>Owner: {{data.service.owner}} · Coverage {{data.service.coverage}}% ·
+           Implemented {{data.service.implemented}}% · Updated {{data.service.last}}</small>
+  </div>
+  <table class="table table-striped">
+    <tr><th>Control</th><th>Ref</th><th>Framework</th><th>Status</th><th>Owner</th><th>Evidence</th></tr>
+    <tr ng-repeat="m in data.mappings">
+      <td>{{m.control}}</td><td>{{m.ref}}</td><td>{{m.framework}}</td>
+      <td><span class="label label-{{m.flag=='ok'?'success':m.flag=='missing'?'default':'warning'}}">{{m.status}}</span></td>
+      <td>{{m.owner}}</td>
+      <td><span ng-repeat="e in m.evidence" class="chip">
+            {{e.title}} ({{e.state}}, until {{e.until}})
+            <a ng-repeat="f in e.files" href="{{f.link}}" target="_blank">]]>📎<![CDATA[{{f.name}}</a>
+          </span>
+          <span ng-if="!m.evidence.length" class="text-danger">No evidence — gap</span></td>
+    </tr>
+  </table>
+  <div class="panel-footer">
+    <strong>Open gaps ({{data.gaps.length}}):</strong>
+    <span ng-repeat="g in data.gaps" class="label label-warning">{{g}}</span>
+    <span ng-if="!data.gaps.length" class="text-success">None ]]>🎉<![CDATA[</span>
+  </div>
+</div>
+<!-- below: embed widget "cpm_evidence_upload" (it reads the same sys_id param) -->]]></template>
+    </sp_widget>
+    <sys_update_version action="INSERT_OR_UPDATE">
+        <action>DELETE</action>
+        <application display_value="Compliance Posture Mapper">f7756d0a738c9310a621f2024ab8b707</application>
+        <file_path/>
+        <instance_id>d0c76825ebca8b98e9bbfddacad0cd41</instance_id>
+        <instance_name>dev433816</instance_name>
+        <merge_base/>
+        <name>sp_widget_a0b399de73c81710a621f2024ab8b708</name>
+        <payload>&lt;?xml version="1.0" encoding="UTF-8"?&gt;&lt;record_update table="sp_widget"&gt;&lt;sp_widget action="INSERT_OR_UPDATE"&gt;&lt;category&gt;custom&lt;/category&gt;&lt;client_script&gt;&lt;![CDATA[api.controller=function() {
+  /* widget controller */
+  var c = this;
+};]]&gt;&lt;/client_script&gt;&lt;controller_as&gt;c&lt;/controller_as&gt;&lt;css/&gt;&lt;data_table&gt;sp_instance&lt;/data_table&gt;&lt;demo_data/&gt;&lt;description/&gt;&lt;docs/&gt;&lt;field_list/&gt;&lt;has_preview&gt;false&lt;/has_preview&gt;&lt;id&gt;cpm_service_360&lt;/id&gt;&lt;internal&gt;false&lt;/internal&gt;&lt;link&gt;&lt;![CDATA[function link(scope, element, attrs, controller) {
+  
+}]]&gt;&lt;/link&gt;&lt;name&gt;CPM Service 360&lt;/name&gt;&lt;option_schema/&gt;&lt;public&gt;false&lt;/public&gt;&lt;roles/&gt;&lt;script&gt;&lt;![CDATA[(function() {
+  var pid = $sp.getParameter('sys_id');           // posture row sys_id
+  var p = new GlideRecordSecure('x_1929776_compli_0_service_posture');
+  if (!pid || !p.get(pid)) { data.error = 'Service not found'; return; }
+
+  data.service = {
+    name: p.business_service.getDisplayValue(),
+    owner: p.business_service.managed_by.getDisplayValue() || 'Unassigned',
+    risk: p.getValue('risk_level'),
+    coverage: parseInt(p.getValue('coverage_pct'), 10),
+    implemented: parseInt(p.getValue('implemented_pct'), 10),
+    total: parseInt(p.getValue('total_controls'), 10),
+    last: p.getDisplayValue('last_calculated')
+  };
+  var svcId = p.getValue('business_service');
+
+  data.mappings = []; data.gaps = [];
+  var m = new GlideRecordSecure('x_1929776_compli_0_mapping');
+  m.addQuery('business_service', svcId);
+  m.orderBy('control');
+  m.query();
+  while (m.next()) {
+    var item = { sys_id: m.getUniqueValue(),
+                 control: m.control.getDisplayValue(),
+                 ref: m.control.getValue('control_reference') || '',
+                 framework: m.control.getDisplayValue('framework'),
+                 status: m.getDisplayValue('implementation_status'),
+                 owner: m.owner.getDisplayValue() || '—',
+                 evidence: [], flag: 'missing' };
+
+    var ev = new GlideRecordSecure('x_1929776_compli_0_evidence');
+    ev.addQuery('mapping', m.getUniqueValue());
+    ev.orderByDesc('valid_until');
+    ev.query();
+    while (ev.next()) {
+      var files = [];
+      var att = new GlideRecord('sys_attachment');
+      att.addQuery('table_name', 'x_1929776_compli_0_evidence');
+      att.addQuery('table_sys_id', ev.getUniqueValue());
+      att.query();
+      while (att.next())
+        files.push({ name: att.getValue('file_name'),
+                     link: '/sys_attachment.do?sys_id=' + att.getUniqueValue() });
+      item.evidence.push({ title: ev.getDisplayValue(), state: ev.getValue('state'),
+                           until: ev.getDisplayValue('valid_until'), files: files });
+      if (ev.getValue('state') == 'valid') item.flag = 'ok';
+      else if (ev.getValue('state') == 'expiring' &amp;&amp; item.flag != 'ok') item.flag = 'expiring';
+      else if (ev.getValue('state') == 'expired' &amp;&amp; item.flag == 'missing') item.flag = 'expired';
+    }
+    if (item.flag != 'ok') data.gaps.push(item.control + ' — ' + item.flag);
+    data.mappings.push(item);
+  }
+})();]]&gt;&lt;/script&gt;&lt;servicenow&gt;false&lt;/servicenow&gt;&lt;sys_class_name&gt;sp_widget&lt;/sys_class_name&gt;&lt;sys_created_by&gt;admin&lt;/sys_created_by&gt;&lt;sys_created_on&gt;2026-10-22 15:17:10&lt;/sys_created_on&gt;&lt;sys_id&gt;a0b399de73c81710a621f2024ab8b708&lt;/sys_id&gt;&lt;sys_mod_count&gt;2&lt;/sys_mod_count&gt;&lt;sys_name&gt;CPM Service 360&lt;/sys_name&gt;&lt;sys_package display_value="Compliance Posture Mapper" source="x_1929776_compli_0"&gt;f7756d0a738c9310a621f2024ab8b707&lt;/sys_package&gt;&lt;sys_policy/&gt;&lt;sys_scope display_value="Compliance Posture Mapper"&gt;f7756d0a738c9310a621f2024ab8b707&lt;/sys_scope&gt;&lt;sys_update_name&gt;sp_widget_a0b399de73c81710a621f2024ab8b708&lt;/sys_update_name&gt;&lt;sys_updated_by&gt;admin&lt;/sys_updated_by&gt;&lt;sys_updated_on&gt;2026-10-22 15:28:39&lt;/sys_updated_on&gt;&lt;template&gt;&lt;![CDATA[&lt;div class="panel panel-default"&gt;
+  &lt;div class="panel-heading"&gt;
+    &lt;h3&gt;{{data.service.name}}
+      &lt;span class="label" ng-class="{'label-success': data.service.risk=='green',
+        'label-warning': data.service.risk=='yellow', 'label-danger': data.service.risk=='red',
+        'label-default': data.service.risk=='not_assessed'}"&gt;{{data.service.risk}}&lt;/span&gt;&lt;/h3&gt;
+    &lt;small&gt;Owner: {{data.service.owner}} · Coverage {{data.service.coverage}}% ·
+           Implemented {{data.service.implemented}}% · Updated {{data.service.last}}&lt;/small&gt;
+  &lt;/div&gt;
+  &lt;table class="table table-striped"&gt;
+    &lt;tr&gt;&lt;th&gt;Control&lt;/th&gt;&lt;th&gt;Ref&lt;/th&gt;&lt;th&gt;Framework&lt;/th&gt;&lt;th&gt;Status&lt;/th&gt;&lt;th&gt;Owner&lt;/th&gt;&lt;th&gt;Evidence&lt;/th&gt;&lt;/tr&gt;
+    &lt;tr ng-repeat="m in data.mappings"&gt;
+      &lt;td&gt;{{m.control}}&lt;/td&gt;&lt;td&gt;{{m.ref}}&lt;/td&gt;&lt;td&gt;{{m.framework}}&lt;/td&gt;
+      &lt;td&gt;&lt;span class="label label-{{m.flag=='ok'?'success':m.flag=='missing'?'default':'warning'}}"&gt;{{m.status}}&lt;/span&gt;&lt;/td&gt;
+      &lt;td&gt;{{m.owner}}&lt;/td&gt;
+      &lt;td&gt;&lt;span ng-repeat="e in m.evidence" class="chip"&gt;
+            {{e.title}} ({{e.state}}, until {{e.until}})
+            &lt;a ng-repeat="f in e.files" href="{{f.link}}" target="_blank"&gt;]]&gt;📎&lt;![CDATA[{{f.name}}&lt;/a&gt;
+          &lt;/span&gt;
+          &lt;span ng-if="!m.evidence.length" class="text-danger"&gt;No evidence — gap&lt;/span&gt;&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/table&gt;
+  &lt;div class="panel-footer"&gt;
+    &lt;strong&gt;Open gaps ({{data.gaps.length}}):&lt;/strong&gt;
+    &lt;span ng-repeat="g in data.gaps" class="label label-warning"&gt;{{g}}&lt;/span&gt;
+    &lt;span ng-if="!data.gaps.length" class="text-success"&gt;None ]]&gt;🎉&lt;![CDATA[&lt;/span&gt;
+  &lt;/div&gt;
+&lt;/div&gt;
+&lt;!-- below: embed widget "cpm_evidence_upload" (it reads the same sys_id param) --&gt;]]&gt;&lt;/template&gt;&lt;/sp_widget&gt;&lt;/record_update&gt;</payload>
+        <payload_hash>-1195259580</payload_hash>
+        <record_name>CPM Service 360</record_name>
+        <reverted_from/>
+        <source>c8856d0a738c9310a621f2024ab8b710</source>
+        <source_table>sys_update_set</source_table>
+        <state>previous</state>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-10-22 15:28:41</sys_created_on>
+        <sys_id>d2b6d956730c1710a621f2024ab8b7c4</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_recorded_at>1a1643a8b4a0000001</sys_recorded_at>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-10-22 15:28:41</sys_updated_on>
+        <type>Widget</type>
+        <update_guid>1ab611d2e60c171057757a9b465faeb7</update_guid>
+        <update_guid_history>1ab611d2e60c171057757a9b465faeb7:-1195259580,ce145d12e10c17101a949aa88db15c8b:687601500</update_guid_history>
+    </sys_update_version>
+    <sys_metadata_delete action="INSERT_OR_UPDATE">
+        <sys_audit_delete display_value="CPM Service 360">2ba907b273c01310a621f2024ab8b735</sys_audit_delete>
+        <sys_class_name>sys_metadata_delete</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-10-24 13:07:54</sys_created_on>
+        <sys_db_object display_value="" name="sp_widget">sp_widget</sys_db_object>
+        <sys_id>1a6fffb0fb264a0a834086cfd9f3ffe4</sys_id>
+        <sys_metadata>a0b399de73c81710a621f2024ab8b708</sys_metadata>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>CPM Service 360</sys_name>
+        <sys_package display_value="Compliance Posture Mapper" source="x_1929776_compli_0">f7756d0a738c9310a621f2024ab8b707</sys_package>
+        <sys_parent/>
+        <sys_policy/>
+        <sys_scope display_value="Compliance Posture Mapper">f7756d0a738c9310a621f2024ab8b707</sys_scope>
+        <sys_scope_delete display_value="">01361efd492541088029ed23d04a1640</sys_scope_delete>
+        <sys_update_name>sp_widget_a0b399de73c81710a621f2024ab8b708</sys_update_name>
+        <sys_update_version display_value="sp_widget_a0b399de73c81710a621f2024ab8b708">d2b6d956730c1710a621f2024ab8b7c4</sys_update_version>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-10-24 13:07:54</sys_updated_on>
+    </sys_metadata_delete>
+</record_update>

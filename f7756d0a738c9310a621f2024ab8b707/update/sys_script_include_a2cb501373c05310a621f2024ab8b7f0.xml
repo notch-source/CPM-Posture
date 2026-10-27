@@ -1,0 +1,412 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_1929776_compli_0.CPMStats</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description/>
+        <mobile_callable>false</mobile_callable>
+        <name>CPMStats</name>
+        <sandbox_callable>false</sandbox_callable>
+        <script><![CDATA[// Role: computes everything the portal displays, in a few aggregate queries, so the widget stays small.
+//       Every query that lists data for a user applies the access rules of CPMAccess explicitly.
+var CPMStats = Class.create();
+CPMStats.prototype = {
+  VERSION: '9',     // shown at the bottom of the page: if it is not 9, this Script Include was not replaced
+  MAX_CARDS: 500,   // a card list shows up to 500 cards (the weakest first); the headline numbers always cover everything
+  RISK_ORDER: { red: 0, yellow: 1, green: 2, not_assessed: 3 },
+  TODO_ORDER: { rejected: 0, expired: 1, missing: 2, expiring: 3 },
+
+  initialize: function() {
+    this.util = new CPMUtil();
+    this.access = new CPMAccess();
+    this.evidence = new CPMEvidence();
+  },
+
+  // ---------- Service cards ----------
+
+  // Role: the cards of the given targets (null = all of them), weakest first, plus the headline numbers.
+  posture: function(ids) {
+    if (ids && !ids.length) return { rows: [], kpi: this._kpi([]), truncated: false };
+    var counted = this._countByTarget(ids);
+    var rows = Object.keys(counted).map(function(id) { return this._finish(counted[id]); }, this);
+    var kpi = this._kpi(rows);
+    var order = this.RISK_ORDER;
+    rows.sort(function(a, b) { return (order[a.risk] - order[b.risk]) || (a.coverage - b.coverage); });
+    var truncated = rows.length > this.MAX_CARDS;
+    rows = rows.slice(0, this.MAX_CARDS);
+    this._addNames(rows);
+    return { rows: rows, kpi: kpi, truncated: truncated };
+  },
+
+  // Role: one aggregate query counts controls per target and state, a second one counts the ones expiring soon.
+  _countByTarget: function(ids) {
+    var rows = {};
+    var states = new GlideAggregate('x_1929776_compli_0_mapping');
+    states.addQuery('active', true);
+    if (ids) states.addQuery('target', 'IN', ids.join(','));
+    states.addAggregate('COUNT');
+    states.groupBy('target');
+    states.groupBy('state');
+    states.query();
+    while (states.next()) {
+      var id = states.getValue('target');
+      rows[id] = rows[id] || this._blank(id);
+      var key = states.getValue('state');
+      if (rows[id][key] === undefined) key = 'missing';   // an unexpected value counts as missing
+      rows[id][key] += parseInt(states.getAggregate('COUNT'), 10);
+    }
+
+    var soon = new GlideAggregate('x_1929776_compli_0_mapping');
+    soon.addQuery('active', true);
+    soon.addQuery('state', 'approved');
+    soon.addQuery('valid_until', '<=', this.util.horizon());
+    if (ids) soon.addQuery('target', 'IN', ids.join(','));
+    soon.addAggregate('COUNT');
+    soon.groupBy('target');
+    soon.query();
+    while (soon.next()) {
+      var sid = soon.getValue('target');
+      rows[sid] = rows[sid] || this._blank(sid);
+      rows[sid].expiring = parseInt(soon.getAggregate('COUNT'), 10);
+    }
+    return rows;
+  },
+
+  _blank: function(id) {
+    return { id: id, name: '', kind: '', approved: 0, awaiting: 0, rejected: 0, missing: 0, expired: 0, expiring: 0 };
+  },
+
+  // Role: adds the total, the coverage percentage and the traffic light to a row.
+  _finish: function(row) {
+    row.total = row.approved + row.awaiting + row.rejected + row.missing + row.expired;
+    row.coverage = row.total ? Math.round(row.approved / row.total * 100) : 0;
+    row.risk = this.util.riskFor(row.total, row.coverage);
+    return row;
+  },
+
+  // Role: the headline numbers over all rows.
+  _kpi: function(rows) {
+    var k = { targets: rows.length, total: 0, approved: 0, expiring: 0, awaiting: 0, rejected: 0, missing: 0, expired: 0, atRisk: 0, coverage: 0 };
+    rows.forEach(function(r) {
+      k.total += r.total; k.approved += r.approved; k.expiring += r.expiring; k.awaiting += r.awaiting;
+      k.rejected += r.rejected; k.missing += r.missing; k.expired += r.expired;
+      if (r.risk == 'red') k.atRisk++;
+    });
+    k.coverage = k.total ? Math.round(k.approved / k.total * 100) : 0;
+    return k;
+  },
+
+  // Role: looks up the names and kinds (Business Service, Server...) of the cards that will be displayed.
+  _addNames: function(rows) {
+    if (!rows.length) return;
+    var byId = {};
+    rows.forEach(function(r) { byId[r.id] = r; });
+    var ci = new GlideRecord('cmdb_ci');
+    ci.addQuery('sys_id', 'IN', Object.keys(byId).join(','));
+    ci.query();
+    while (ci.next()) {
+      byId[ci.getUniqueValue()].name = ci.getValue('name');
+      byId[ci.getUniqueValue()].kind = ci.getDisplayValue('sys_class_name');
+    }
+  },
+
+  // ---------- Follow-up lists ----------
+
+  // Role: the lists behind the headline numbers. For one person (ownerId given) it returns their own controls that
+  //       need evidence, are expiring soon, or are stale. For the compliance team (ownerId null) it returns the same
+  //       lists for the whole company, plus the controls without owner and the services without any control.
+  followUp: function(ownerId, limit) {
+    var who = ownerId ? 'owner=' + ownerId + '^' : '';
+    var out = {
+      need: this._mappingList(who + 'active=true^stateINmissing,rejected', 'target', limit),
+      expiring: this._mappingList(who + 'active=true^state=approved^valid_until<=' + this.util.horizon(), 'valid_until', limit),
+      stale: this._mappingList(who + 'active=true^state=expired', 'target', limit)
+    };
+    if (!ownerId) {
+      out.noOwner = this._mappingList('active=true^ownerISEMPTY', 'target', limit);
+      out.uncovered = this.uncovered(limit);
+    }
+    return out;
+  },
+
+  // Role: one list of controls matching a query: the total number, and the first rows (up to "limit").
+  _mappingList: function(query, orderField, limit) {
+    var out = { count: this.count('x_1929776_compli_0_mapping', query), items: [] };
+    var gr = new GlideRecord('x_1929776_compli_0_mapping');
+    gr.addEncodedQuery(query);
+    gr.orderBy(orderField);
+    gr.setLimit(limit);
+    gr.query();
+    var today = this.util.today();
+    while (gr.next()) out.items.push(this._row(gr, today));
+    return out;
+  },
+
+  // Role: turns a mapping into one row of a list. When the control has no owner, the row says why:
+  //       the CI has no owner at all, or it has one and the control was not synchronised yet.
+  _row: function(gr, today) {
+    var until = gr.getValue('valid_until') || '';
+    var ownerId = gr.getValue('owner') || '';
+    var ciHasOwner = !!((gr.target.owned_by + '') || (gr.target.managed_by + ''));
+    var flag = '';
+    if (!ownerId) flag = ciHasOwner
+      ? 'The CI has an owner, but this control was not synchronised yet (it happens tonight).'
+      : 'No owner on the service or CI. Set "Owned by" in the CMDB.';
+    return {
+      targetId: gr.getValue('target'),
+      target: gr.target.getDisplayValue(),
+      ref: gr.control.reference + '',
+      control: gr.control.name + '',
+      status: gr.getValue('state'),
+      owner: gr.getDisplayValue('owner'),
+      ownerFlag: flag,
+      until: until,
+      daysLeft: until ? this.util.daysBetween(today, until) : null
+    };
+  },
+
+  // Role: business services that have no control at all. This is the "coverage gap" of the dashboard.
+  //       Each row says who owns the service, or flags that nobody does.
+  uncovered: function(limit) {
+    var mapped = {};
+    var ga = new GlideAggregate('x_1929776_compli_0_mapping');
+    ga.addQuery('active', true);
+    ga.addAggregate('COUNT');
+    ga.groupBy('target');
+    ga.query();
+    while (ga.next()) mapped[ga.getValue('target')] = true;
+
+    var out = { count: 0, items: [] };
+    var service = new GlideRecord('cmdb_ci_service');
+    var scope = this.util.prop('service_scope', '');
+    if (scope) service.addEncodedQuery(scope);
+    service.orderBy('name');
+    service.query();
+    while (service.next()) {
+      if (mapped[service.getUniqueValue()]) continue;
+      out.count++;
+      if (out.items.length >= limit) continue;
+      var owner = service.getDisplayValue('owned_by') || service.getDisplayValue('managed_by');
+      out.items.push({
+        targetId: service.getUniqueValue(),
+        target: service.getValue('name'),
+        ref: '',
+        control: '',
+        status: 'uncovered',
+        owner: owner,
+        ownerFlag: owner ? '' : 'No owner on the service. Set "Owned by" in the CMDB.',
+        until: '',
+        daysLeft: null
+      });
+    }
+    return out;
+  },
+
+  // ---------- Compliance team ----------
+
+  // Role: the review inbox, oldest submission first, with the file names. Only the compliance team gets a list.
+  inbox: function(limit) {
+    var out = [];
+    if (!this.access.isAdmin()) return out;
+    var today = this.util.today();
+    var gr = new GlideRecord('x_1929776_compli_0_evidence');
+    gr.addQuery('status', 'pending');
+    gr.orderBy('submitted_on');
+    gr.setLimit(limit);
+    gr.query();
+    while (gr.next()) {
+      var on = gr.getValue('submitted_on') || '';
+      out.push({
+        id: gr.getUniqueValue(),
+        number: gr.getValue('number'),
+        target: gr.mapping.target.getDisplayValue(),
+        control: gr.mapping.control.name + '',
+        guidance: gr.mapping.control.guidance + '',
+        renewal: (gr.mapping.state + '') == 'approved',
+        by: gr.getDisplayValue('submitted_by'),
+        on: on,
+        ageDays: on ? this.util.daysBetween(on.substring(0, 10), today) : 0,
+        canReview: gr.getValue('submitted_by') != gs.getUserID() || this.util.prop('allow_self_review', 'false') == 'true',
+        files: this._filesOf(gr.getUniqueValue())
+      });
+    }
+    return out;
+  },
+
+  // Role: counts the records matching a query (pending submissions, controls without an owner...).
+  count: function(table, query) {
+    var ga = new GlideAggregate(table);
+    ga.addEncodedQuery(query);
+    ga.addAggregate('COUNT');
+    ga.query();
+    return ga.next() ? parseInt(ga.getAggregate('COUNT'), 10) : 0;
+  },
+
+  // Role: coverage per framework, weakest first. Answers "are we ready for ISO / SOC 2?".
+  frameworks: function() {
+    var label = {};
+    var control = new GlideRecord('x_1929776_compli_0_control');
+    control.query();
+    while (control.next()) label[control.getUniqueValue()] = control.getDisplayValue('framework') || 'Other';
+
+    var totals = {};
+    var ga = new GlideAggregate('x_1929776_compli_0_mapping');
+    ga.addQuery('active', true);
+    ga.addAggregate('COUNT');
+    ga.groupBy('control');
+    ga.groupBy('state');
+    ga.query();
+    while (ga.next()) {
+      var name = label[ga.getValue('control')] || 'Other';
+      var t = totals[name] = totals[name] || { name: name, total: 0, approved: 0 };
+      var n = parseInt(ga.getAggregate('COUNT'), 10);
+      t.total += n;
+      if (ga.getValue('state') == 'approved') t.approved += n;
+    }
+    return Object.keys(totals).map(function(k) {
+      var t = totals[k];
+      t.coverage = t.total ? Math.round(t.approved / t.total * 100) : 0;
+      return t;
+    }).sort(function(a, b) { return a.coverage - b.coverage; });
+  },
+
+  // ---------- One CI or service ----------
+
+  // Role: everything the page of one CI or service shows: its numbers, each control and the evidence history.
+  //       The compliance team sees every control of the page, an owner only the controls they own.
+  detail: function(targetId) {
+    var ci = new GlideRecord('cmdb_ci');
+    if (!ci.get(targetId)) return null;
+
+    var seesAll = this.access.isAdmin();
+    var history = this._evidenceByMapping(targetId, seesAll);
+    var horizon = this.util.horizon();
+    var controls = [];
+    var mapping = new GlideRecord('x_1929776_compli_0_mapping');
+    mapping.addQuery('target', targetId);
+    mapping.addQuery('active', true);
+    if (!seesAll) mapping.addQuery('owner', this.access.userId);
+    mapping.query();
+    while (mapping.next()) {
+      var state = mapping.getValue('state');
+      var until = mapping.getValue('valid_until') || '';
+      var list = history[mapping.getUniqueValue()] || [];
+      var waiting = list.some(function(e) { return e.status == 'pending'; });   // a submission is with the team
+      var isOwner = this.access.isOwnerOf(mapping);                              // only the owner can upload
+      var open = this.evidence.canSubmit(state, until) && !waiting;              // and only when evidence is expected
+      controls.push({
+        id: mapping.getUniqueValue(),
+        ref: mapping.control.reference + '',
+        name: mapping.control.name + '',
+        framework: mapping.control.framework.getDisplayValue(),
+        description: mapping.control.description + '',
+        guidance: mapping.control.guidance + '',
+        status: (state == 'approved' && until && until <= horizon) ? 'expiring' : state,
+        until: until,
+        ownerId: mapping.getValue('owner') || '',
+        waiting: waiting,
+        canUpload: isOwner && open,
+        why: this._whyNot(isOwner, open, waiting, state, mapping),
+        renew: state == 'approved',
+        rejection: (list.length && list[0].status == 'rejected') ? list[0].comment : '',
+        evidence: list
+      });
+    }
+    var order = this.TODO_ORDER;
+    controls.sort(function(a, b) {
+      var wa = order[a.status] === undefined ? 9 : order[a.status];
+      var wb = order[b.status] === undefined ? 9 : order[b.status];
+      return (wa - wb) || a.ref.localeCompare(b.ref);
+    });
+
+    var counts = this._countByTarget([targetId]);
+    return {
+      id: targetId,
+      name: ci.getValue('name'),
+      kind: ci.getDisplayValue('sys_class_name'),
+      owner: ci.getDisplayValue('owned_by') || ci.getDisplayValue('managed_by'),
+      summary: this._finish(counts[targetId] || this._blank(targetId)),
+      controls: controls
+    };
+  },
+
+  // Role: explains why a control has no upload area, so the page never leaves the user guessing.
+  _whyNot: function(isOwner, open, waiting, state, mapping) {
+    if (isOwner && open) return '';
+    if (!isOwner) {
+      var owner = mapping.getDisplayValue('owner');
+      return owner
+        ? 'Only ' + owner + ' can upload evidence for this control.'
+        : 'This control has no owner yet, so nobody can upload evidence. Set an owner on the service or CI in the CMDB.';
+    }
+    if (waiting) return '';   // the page already says "waiting for the compliance team"
+    if (state == 'approved') {
+      var from = this.util.addDays(mapping.getValue('valid_until'), -this.util.intProp('warning_days', 30));
+      return 'Approved until ' + mapping.getValue('valid_until') + '. You can send a renewal from ' + from + '.';
+    }
+    return 'Evidence cannot be added in the current state (' + state + ').';
+  },
+
+  // Role: the last four submissions of each control of a target, newest first, in one query.
+  //       Drafts are private and left out. An owner only gets the evidence of the controls they own.
+  _evidenceByMapping: function(targetId, seesAll) {
+    var map = {};
+    var gr = new GlideRecord('x_1929776_compli_0_evidence');
+    gr.addQuery('mapping.target', targetId);
+    gr.addQuery('status', '!=', 'draft');
+    if (!seesAll) gr.addQuery('mapping.owner', this.access.userId);
+    gr.orderByDesc('submitted_on');
+    gr.setLimit(300);
+    gr.query();
+    while (gr.next()) {
+      var key = gr.getValue('mapping');
+      map[key] = map[key] || [];
+      if (map[key].length >= 4) continue;
+      map[key].push({
+        id: gr.getUniqueValue(),
+        number: gr.getValue('number'),
+        status: gr.getValue('status'),
+        label: gr.getDisplayValue('status'),
+        by: gr.getDisplayValue('submitted_by'),
+        on: gr.getValue('submitted_on') || '',
+        reviewedBy: gr.getDisplayValue('reviewed_by'),
+        until: gr.getValue('valid_until') || '',
+        comment: gr.getValue('status') == 'rejected' ? (gr.getValue('review_comment') || '') : '',
+        files: this._filesOf(gr.getUniqueValue())
+      });
+    }
+    return map;
+  },
+
+  // Role: the files attached to one submission (names only: the content is fetched when someone opens a file).
+  _filesOf: function(evidenceId) {
+    var files = [];
+    var att = new GlideSysAttachment().getAttachments('x_1929776_compli_0_evidence', evidenceId);
+    while (att.next()) {
+      files.push({
+        id: att.getUniqueValue(),
+        name: att.getValue('file_name'),
+        isImage: /^image\//.test(att.getValue('content_type') || '')
+      });
+    }
+    return files;
+  },
+
+  type: 'CPMStats'
+};]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-10-25 13:45:37</sys_created_on>
+        <sys_id>a2cb501373c05310a621f2024ab8b7f0</sys_id>
+        <sys_mod_count>13</sys_mod_count>
+        <sys_name>CPMStats</sys_name>
+        <sys_package display_value="Compliance Posture Mapper" source="x_1929776_compli_0">f7756d0a738c9310a621f2024ab8b707</sys_package>
+        <sys_policy>read</sys_policy>
+        <sys_scope display_value="Compliance Posture Mapper">f7756d0a738c9310a621f2024ab8b707</sys_scope>
+        <sys_update_name>sys_script_include_a2cb501373c05310a621f2024ab8b7f0</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-10-27 16:47:18</sys_updated_on>
+    </sys_script_include>
+</record_update>

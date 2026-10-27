@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?><database>
+    <element attributes="enforce_dot_walk_cross_scope_access=true" db_object_id="2d8798d773805310a621f2024ab8b7c3" label="Mapping" max_length="40" name="x_1929776_compli_0_mapping" type="collection">
+        <element default="true" label="Active" max_length="255" name="active" type="boolean"/>
+        <element label="Control" mandatory="true" max_length="32" name="control" reference="x_1929776_compli_0_control" type="reference"/>
+        <element label="Target" mandatory="true" max_length="32" name="target" reference="cmdb_ci" type="reference"/>
+        <element label="Valid until" max_length="40" name="valid_until" type="glide_date"/>
+        <element choice="3" default="missing" label="State" max_length="255" name="state" type="choice">
+            <choice>
+                <element inactive_on_update="false" label="Rejected" sequence="3" value="rejected"/>
+                <element inactive_on_update="false" label="Awaiting" sequence="1" value="awaiting"/>
+                <element inactive_on_update="false" label="Expired" sequence="4" value="expired"/>
+                <element inactive_on_update="false" label="Approved" sequence="2" value="approved"/>
+                <element inactive_on_update="false" label="Missing" sequence="0" value="missing"/>
+            </choice>
+        </element>
+        <element label="Owner" max_length="32" name="owner" reference="sys_user" type="reference"/>
+        <element attributes="edge_encryption_enabled=true" default="javascript:global.getNextObjNumberPadded();" label="Number" max_length="40" name="number" type="string"/>
+        <index name="index">
+            <element name="control"/>
+        </index>
+        <index name="index2">
+            <element name="owner"/>
+        </index>
+        <index name="index3">
+            <element name="target"/>
+        </index>
+    </element>
+</database>

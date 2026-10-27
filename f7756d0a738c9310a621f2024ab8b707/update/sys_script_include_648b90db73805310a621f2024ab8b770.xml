@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_1929776_compli_0.CPMReview</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description/>
+        <mobile_callable>false</mobile_callable>
+        <name>CPMReview</name>
+        <sandbox_callable>false</sandbox_callable>
+        <script><![CDATA[// Role: the compliance team's decisions. Approving makes the proof count until its expiry date;
+//       rejecting sends the owner back with a reason. Both return '' on success, or an error message.
+var CPMReview = Class.create();
+CPMReview.prototype = {
+  REJECTED_EVENT: 'x_1929776_compli_0.evidence.rejected',
+
+  initialize: function() {
+    this.util = new CPMUtil();
+  },
+
+  // Role: approves a pending submission and starts the clock on the control's validity period.
+  approve: function(evidenceId) {
+    var loaded = this._load(evidenceId);
+    if (loaded.error) return loaded.error;
+
+    var days = parseInt(loaded.mapping.control.validity_days + '', 10) || 365;
+    var until = this.util.addDays(this.util.today(), days);
+    this._supersedeOlder(loaded.mapping.getUniqueValue(), evidenceId);
+
+    loaded.evidence.setValue('status', 'approved');
+    loaded.evidence.setValue('valid_until', until);
+    this._stamp(loaded.evidence);
+
+    loaded.mapping.setValue('state', 'approved');
+    loaded.mapping.setValue('valid_until', until);
+    loaded.mapping.update();
+    return '';
+  },
+
+  // Role: rejects a pending submission. A comment is required, because the owner receives it by email.
+  reject: function(evidenceId, comment) {
+    var loaded = this._load(evidenceId);
+    if (loaded.error) return loaded.error;
+    comment = (comment || '').trim();
+    if (!comment) return 'Write a short reason before rejecting: the owner will read it.';
+
+    loaded.evidence.setValue('status', 'rejected');
+    loaded.evidence.setValue('review_comment', comment.substring(0, 500));
+    this._stamp(loaded.evidence);
+
+    // A rejected first submission sends the control back to the owner. A rejected renewal does not:
+    // the older approved proof keeps counting until it expires.
+    if (loaded.mapping.getValue('state') == 'awaiting') {
+      loaded.mapping.setValue('state', 'rejected');
+      loaded.mapping.update();
+    }
+    var recipient = loaded.evidence.getValue('submitted_by') || loaded.mapping.getValue('owner');
+    if (recipient) gs.eventQueue(this.REJECTED_EVENT, loaded.evidence, recipient, '');
+    return '';
+  },
+
+  // Role: loads the submission and its mapping, and refuses anything the reviewer must not do.
+  _load: function(evidenceId) {
+    if (!gs.hasRole('x_1929776_compli_0.admin')) return { error: 'Only the compliance team can review evidence.' };
+    var evidence = new GlideRecord('x_1929776_compli_0_evidence');
+    if (!evidenceId || !evidence.get(evidenceId) || evidence.getValue('status') != 'pending')
+      return { error: 'This evidence is no longer waiting for review.' };
+    if (evidence.getValue('submitted_by') == gs.getUserID() && this.util.prop('allow_self_review', 'false') != 'true')
+      return { error: 'You cannot review evidence that you submitted yourself.' };
+    var mapping = new GlideRecord('x_1929776_compli_0_mapping');
+    if (!mapping.get(evidence.getValue('mapping'))) return { error: 'The control assignment no longer exists.' };
+    return { evidence: evidence, mapping: mapping };
+  },
+
+  // Role: records who decided and when.
+  _stamp: function(evidence) {
+    evidence.setValue('reviewed_by', gs.getUserID());
+    evidence.setValue('reviewed_on', new GlideDateTime().getValue());
+    evidence.update();
+  },
+
+  // Role: when a new proof is approved, earlier approved proofs of the same control are marked Superseded.
+  _supersedeOlder: function(mappingId, exceptId) {
+    var older = new GlideRecord('x_1929776_compli_0_evidence');
+    older.addQuery('mapping', mappingId);
+    older.addQuery('status', 'approved');
+    older.addQuery('sys_id', '!=', exceptId);
+    older.query();
+    while (older.next()) {
+      older.setValue('status', 'superseded');
+      older.update();
+    }
+  },
+
+  type: 'CPMReview'
+};]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-10-25 13:44:09</sys_created_on>
+        <sys_id>648b90db73805310a621f2024ab8b770</sys_id>
+        <sys_mod_count>5</sys_mod_count>
+        <sys_name>CPMReview</sys_name>
+        <sys_package display_value="Compliance Posture Mapper" source="x_1929776_compli_0">f7756d0a738c9310a621f2024ab8b707</sys_package>
+        <sys_policy>read</sys_policy>
+        <sys_scope display_value="Compliance Posture Mapper">f7756d0a738c9310a621f2024ab8b707</sys_scope>
+        <sys_update_name>sys_script_include_648b90db73805310a621f2024ab8b770</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-10-27 16:47:02</sys_updated_on>
+    </sys_script_include>
+</record_update>

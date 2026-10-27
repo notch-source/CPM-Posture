@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update sys_domain="global" table="sys_app_module">
+    <sys_app_module action="DELETE">
+        <active>true</active>
+        <application display_value="Compliance Posture">396b9396730c5710a621f2024ab8b7ad</application>
+        <assessment/>
+        <device_type/>
+        <filter/>
+        <hint/>
+        <homepage/>
+        <image/>
+        <karuna_route/>
+        <link_type>DIRECT</link_type>
+        <map_page/>
+        <mobile_title>Controls</mobile_title>
+        <mobile_view_name>Mobile</mobile_view_name>
+        <name>x_1929776_compli_0_control</name>
+        <order>200</order>
+        <override_menu_roles>false</override_menu_roles>
+        <query>now/platform/list/x_1929776_compli_0_control/default-view/params/module/e9ac1b5a730c5710a621f2024ab8b7e0</query>
+        <report/>
+        <require_confirmation>true</require_confirmation>
+        <roles/>
+        <route display_value="List">a99d9a43fffcf2102fdcffffffffff31</route>
+        <screen display_value="List">b6254dcaff85b2502fdcffffffffff90</screen>
+        <sys_class_name>sys_app_module</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-10-23 01:14:32</sys_created_on>
+        <sys_domain>global</sys_domain>
+        <sys_domain_path>/</sys_domain_path>
+        <sys_id>e9ac1b5a730c5710a621f2024ab8b7e0</sys_id>
+        <sys_mod_count>1</sys_mod_count>
+        <sys_name>Controls</sys_name>
+        <sys_overrides/>
+        <sys_package display_value="Compliance Posture Mapper" source="x_1929776_compli_0">f7756d0a738c9310a621f2024ab8b707</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Compliance Posture Mapper">f7756d0a738c9310a621f2024ab8b707</sys_scope>
+        <sys_update_name>sys_app_module_e9ac1b5a730c5710a621f2024ab8b7e0</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-10-23 01:15:11</sys_updated_on>
+        <timeline_page/>
+        <title>Controls</title>
+        <uncancelable>false</uncancelable>
+        <ux_list/>
+        <view_name/>
+        <window_name/>
+    </sys_app_module>
+    <sys_update_version action="INSERT_OR_UPDATE">
+        <action>DELETE</action>
+        <application display_value="Compliance Posture Mapper">f7756d0a738c9310a621f2024ab8b707</application>
+        <file_path/>
+        <instance_id>d0c76825ebca8b98e9bbfddacad0cd41</instance_id>
+        <instance_name>dev433816</instance_name>
+        <merge_base/>
+        <name>sys_app_module_e9ac1b5a730c5710a621f2024ab8b7e0</name>
+        <payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update sys_domain="global" table="sys_app_module"><sys_app_module action="INSERT_OR_UPDATE"><active>true</active><application display_value="Compliance Posture">396b9396730c5710a621f2024ab8b7ad</application><assessment/><device_type/><filter/><hint/><homepage/><image/><karuna_route/><link_type>DIRECT</link_type><map_page/><mobile_title>Controls</mobile_title><mobile_view_name>Mobile</mobile_view_name><name>x_1929776_compli_0_control</name><order>200</order><override_menu_roles>false</override_menu_roles><query>now/platform/list/x_1929776_compli_0_control/default-view/params/module/e9ac1b5a730c5710a621f2024ab8b7e0</query><report/><require_confirmation>true</require_confirmation><roles/><route display_value="List">a99d9a43fffcf2102fdcffffffffff31</route><screen display_value="List">b6254dcaff85b2502fdcffffffffff90</screen><sys_class_name>sys_app_module</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-10-23 01:14:32</sys_created_on><sys_domain>global</sys_domain><sys_domain_path>/</sys_domain_path><sys_id>e9ac1b5a730c5710a621f2024ab8b7e0</sys_id><sys_mod_count>1</sys_mod_count><sys_name>Controls</sys_name><sys_overrides/><sys_package display_value="Compliance Posture Mapper" source="x_1929776_compli_0">f7756d0a738c9310a621f2024ab8b707</sys_package><sys_policy/><sys_scope display_value="Compliance Posture Mapper">f7756d0a738c9310a621f2024ab8b707</sys_scope><sys_update_name>sys_app_module_e9ac1b5a730c5710a621f2024ab8b7e0</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-10-23 01:15:11</sys_updated_on><timeline_page/><title>Controls</title><uncancelable>false</uncancelable><ux_list/><view_name/><window_name/></sys_app_module></record_update>]]></payload>
+        <payload_hash>1528148958</payload_hash>
+        <record_name>Controls</record_name>
+        <reverted_from/>
+        <source>c8856d0a738c9310a621f2024ab8b710</source>
+        <source_table>sys_update_set</source_table>
+        <state>previous</state>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-10-23 01:15:12</sys_created_on>
+        <sys_id>06fc9b9a730c5710a621f2024ab8b729</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_recorded_at>1a1665386000000001</sys_recorded_at>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-10-23 01:15:12</sys_updated_on>
+        <type>Module</type>
+        <update_guid>f1fc9b9ab30c571027cd260510758828</update_guid>
+        <update_guid_history>f1fc9b9ab30c571027cd260510758828:1528148958,d0dc1f1aed0c57108ea0c1a3412e372b:1201947286</update_guid_history>
+    </sys_update_version>
+    <sys_metadata_delete action="INSERT_OR_UPDATE">
+        <sys_audit_delete display_value="Controls">b73edb5e730c5710a621f2024ab8b7ee</sys_audit_delete>
+        <sys_class_name>sys_metadata_delete</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-10-23 01:20:48</sys_created_on>
+        <sys_db_object display_value="" name="sys_app_module">sys_app_module</sys_db_object>
+        <sys_id>9060e4d2d28d4568954a384c3590c110</sys_id>
+        <sys_metadata>e9ac1b5a730c5710a621f2024ab8b7e0</sys_metadata>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>Controls</sys_name>
+        <sys_package display_value="Compliance Posture Mapper" source="x_1929776_compli_0">f7756d0a738c9310a621f2024ab8b707</sys_package>
+        <sys_parent/>
+        <sys_policy/>
+        <sys_scope display_value="Compliance Posture Mapper">f7756d0a738c9310a621f2024ab8b707</sys_scope>
+        <sys_scope_delete display_value="">01361efd492541088029ed23d04a1640</sys_scope_delete>
+        <sys_update_name>sys_app_module_e9ac1b5a730c5710a621f2024ab8b7e0</sys_update_name>
+        <sys_update_version display_value="sys_app_module_e9ac1b5a730c5710a621f2024ab8b7e0">06fc9b9a730c5710a621f2024ab8b729</sys_update_version>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-10-23 01:20:48</sys_updated_on>
+    </sys_metadata_delete>
+</record_update>
