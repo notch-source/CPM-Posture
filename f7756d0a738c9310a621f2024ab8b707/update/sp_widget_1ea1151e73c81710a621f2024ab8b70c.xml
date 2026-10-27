@@ -1,0 +1,960 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sp_widget">
+    <sp_widget action="INSERT_OR_UPDATE">
+        <category>custom</category>
+        <client_script><![CDATA[api.controller = function($scope, $timeout) {
+  /* Role: everything that happens in the browser: tabs, follow-up lists, search, review buttons, drag and drop, and the
+     two-step upload (choose files, then Submit). There is no Link function: all the browser code is here. */
+  var c = this;
+  $scope.c = c;     /* makes "c" available to the template whatever the "Controller as" setting is */
+  c.build = '9';    /* must match the "server build" shown at the bottom of the page */
+  console.log('[CPM] widget build ' + c.build + ' loaded');
+
+  var MAX_BYTES = 3 * 1024 * 1024;
+  var MAX_FILES = 10;
+  var ALLOWED = ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'application/pdf'];
+
+  /* The follow-up lists. The compliance team sees five of them for the whole company, an owner sees three for their own controls.
+     These arrays never change, so the page can loop over them safely. */
+  var TEAM_LISTS = [
+    { key: 'need', label: 'Missing or rejected' },
+    { key: 'expiring', label: 'Expiring soon' },
+    { key: 'stale', label: 'Stale (expired)' },
+    { key: 'noOwner', label: 'Controls without owner' },
+    { key: 'uncovered', label: 'Services without controls' }
+  ];
+  var MINE_LISTS = [
+    { key: 'need', label: 'Need evidence' },
+    { key: 'expiring', label: 'Expiring soon' },
+    { key: 'stale', label: 'Stale (expired)' }
+  ];
+  var EMPTY_TEXT = {
+    need: 'Nothing is missing or rejected.',
+    expiring: 'Nothing expires soon.',
+    stale: 'Nothing is stale.',
+    noOwner: 'Every control has an owner.',
+    uncovered: 'Every service has at least one control.'
+  };
+
+  /* Block 1: labels and state of the screen. */
+  c.label = {
+    approved: 'Approved', expiring: 'Expiring soon', awaiting: 'Awaiting review',
+    rejected: 'Rejected', missing: 'Needs evidence', expired: 'Expired', uncovered: 'Not covered'
+  };
+  c.tab = ($scope.data && $scope.data.isAdmin) ? 'review' : 'mine';   /* owners only have "my services" */
+  c.sel = { team: 'need', mine: 'need' };                              /* the list selected in each follow-up block */
+  c.q = '';          /* the text typed in the search bar */
+  c.filter = 'all';  /* the risk chip that is selected */
+  c.filters = [
+    { key: 'all', label: 'All' }, { key: 'red', label: 'High risk' }, { key: 'yellow', label: 'At risk' },
+    { key: 'green', label: 'Healthy' }, { key: 'not_assessed', label: 'Not assessed' }
+  ];
+  c.staged = {};     /* files chosen but not yet submitted, per control */
+  c.busy = {};       /* upload in progress, per control */
+  c.progress = {};   /* text of the Submit button while sending, per control */
+  c.msg = {};        /* error shown under the upload area, per control */
+  c.working = {};    /* review action in progress, per submission */
+  c.rejecting = {};  /* reject box open, per submission */
+  c.comment = {};    /* rejection reason typed, per submission */
+  c.opening = '';    /* id of the file being opened */
+  c.preview = null;  /* image shown in the viewer */
+  c.toast = null;    /* last result, shown at the top of the page */
+
+  /* Block 2: talking to the server.
+     server.get() returns the server's answer WITHOUT updating the page data, so the answer is read here.
+     ask()     sends a request and returns the answer (the page data is left alone: used for light requests);
+     refresh() does the same, then replaces the page data with the answer (used after an action). */
+  function dataOf(response) {
+    var d = response && response.data;
+    return (d && typeof d === 'object' && d.serverBuild !== undefined) ? d : null;
+  }
+  function ask(extra) {
+    var payload = angular.extend({}, ($scope.data || {}).params, extra || {});
+    return c.server.get(payload).then(dataOf);
+  }
+  function refresh(extra) {
+    return ask(extra).then(function(fresh) {
+      if (fresh) $scope.data = fresh;
+      return fresh;
+    });
+  }
+
+  /* Keeps &debug=1 on every link when it is switched on. */
+  c.dbg = function() {
+    return (($scope.data || {}).params || {}).debug == '1' ? '&debug=1' : '';
+  };
+
+  /* Block 3: tabs, headline tiles and follow-up lists. */
+
+  /* Opens a tab, and optionally selects the list to show in it. The headline tiles use this. */
+  c.go = function(tab, listKey) {
+    c.tab = tab;
+    if (listKey) c.sel[tab === 'follow' ? 'team' : 'mine'] = listKey;
+  };
+  /* Which block of lists is shown: the company's (tab Follow-up) or my own (tab My services). */
+  c.ctx = function() { return c.tab === 'follow' ? 'team' : 'mine'; };
+  c.showFollow = function() { return c.tab === 'follow' || c.tab === 'mine'; };
+  c.showCards = function() { return c.tab === 'all' || c.tab === 'mine'; };
+  c.defs = function() { return c.ctx() === 'team' ? TEAM_LISTS : MINE_LISTS; };
+  c.section = function() { return c.sel[c.ctx()]; };
+  c.pick = function(key) { c.sel[c.ctx()] = key; };
+  function followSet() {
+    var d = $scope.data || {};
+    return (c.ctx() === 'team' ? d.follow : d.myFollow) || {};
+  }
+  c.countOf = function(key) {
+    var part = followSet()[key];
+    return part ? part.count : 0;
+  };
+  c.items = function() {
+    var part = followSet()[c.section()];
+    return part ? part.items : [];
+  };
+  c.more = function() {
+    var part = followSet()[c.section()];
+    return part ? Math.max(0, part.count - part.items.length) : 0;
+  };
+  c.emptyText = function() { return EMPTY_TEXT[c.section()] || 'Nothing to show.'; };
+
+  /* Chooses, for each block, the first list that has something in it. It runs once, when the page opens. */
+  (function pickFirstFilled() {
+    var d = $scope.data || {};
+    [['team', d.follow, TEAM_LISTS], ['mine', d.myFollow, MINE_LISTS]].forEach(function(entry) {
+      var set = entry[1] || {};
+      for (var i = 0; i < entry[2].length; i++) {
+        var key = entry[2][i].key;
+        if (set[key] && set[key].count) { c.sel[entry[0]] = key; return; }
+      }
+    });
+  })();
+
+  /* Block 4: the service cards, the search bar and the risk chips. Everything is filtered in the browser, so it is instant. */
+  c.hero = function() {
+    var d = $scope.data || {};
+    var part = d.isAdmin ? d.team : d.mine;
+    return (part && part.kpi) || { coverage: 0 };
+  };
+  function cardPart() {
+    var d = $scope.data || {};
+    return (c.tab === 'all' && d.team) ? d.team : d.mine;
+  }
+  c.rows = function() {
+    var part = cardPart();
+    return (part && part.rows) || [];
+  };
+  c.limited = function() {
+    var part = cardPart();
+    return !!(part && part.truncated);
+  };
+  function matchesText(row) {
+    var q = (c.q || '').trim().toLowerCase();
+    return !q || ((row.name || '') + ' ' + (row.kind || '')).toLowerCase().indexOf(q) > -1;
+  }
+  c.match = function(row) {
+    return matchesText(row) && (c.filter === 'all' || row.risk === c.filter);
+  };
+  c.count = function(key) {
+    return c.rows().filter(function(r) { return matchesText(r) && (key === 'all' || r.risk === key); }).length;
+  };
+
+  /* Block 5: the compliance team's decisions. The server does the work and the page is refreshed. */
+  function review(evidence, payload) {
+    c.working[evidence.id] = true;
+    var done = function() { c.working[evidence.id] = false; };
+    refresh(payload).then(done, done);
+  }
+  c.approve = function(evidence) {
+    review(evidence, { action: 'approve', evidence: evidence.id });
+  };
+  c.reject = function(evidence) {
+    review(evidence, { action: 'reject', evidence: evidence.id, comment: c.comment[evidence.id] });
+  };
+
+  /* Block 6: opening a submitted file. Images appear in the viewer, other files are downloaded. */
+  function download(file) {
+    var link = document.createElement('a');
+    link.href = 'data:' + file.type + ';base64,' + file.content;
+    link.download = file.name;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+  c.open = function(evidenceId, file) {
+    c.opening = file.id;
+    ask({ action: 'file', evidence: evidenceId, attachment: file.id }).then(function(fresh) {
+      c.opening = '';
+      var result = fresh && fresh.file;
+      if (!result || !result.ok) {
+        c.toast = { type: 'error', text: (result && result.message) || 'The file could not be opened.' };
+        return;
+      }
+      if (/^image\//.test(result.type)) c.preview = { name: result.name, src: 'data:' + result.type + ';base64,' + result.content };
+      else download(result);
+    }, function() {
+      c.opening = '';
+      c.toast = { type: 'error', text: 'The file could not be opened.' };
+    });
+  };
+
+  /* Block 7, step 1 of an upload: choosing files. Nothing is sent to the server here. */
+
+  /* Gives pasted screenshots a readable name, because browsers call them "image.png". */
+  function fileName(file) {
+    var plain = file.name && file.name !== 'image.png';
+    return plain ? file.name : 'screenshot-' + Date.now() + '-' + Math.floor(Math.random() * 1000) + '.png';
+  }
+  function humanSize(bytes) {
+    return bytes > 1024 * 1024 ? (bytes / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(bytes / 1024)) + ' KB';
+  }
+  /* Returns a sentence when a file cannot be accepted, or '' when it is fine. */
+  function problemWith(file, list) {
+    if (ALLOWED.indexOf(file.type) < 0) return 'Only images (PNG, JPG, GIF, WEBP) and PDF files are accepted.';
+    if (file.size > MAX_BYTES) return 'This file is larger than 3 MB. Take a smaller screenshot, or save it as a JPG or PDF.';
+    if (list.length >= MAX_FILES) return 'A submission can hold up to ' + MAX_FILES + ' files.';
+    return '';
+  }
+
+  /* Receives the files the user dropped, pasted or chose, and shows them as previews. */
+  c.stage = function(mappingId, files) {
+    console.log('[CPM] ' + files.length + ' file(s) chosen for control ' + mappingId);
+    var list = c.staged[mappingId] = c.staged[mappingId] || [];
+    c.msg[mappingId] = '';
+    c.toast = null;
+    files.forEach(function(file) {
+      var problem = problemWith(file, list);
+      if (problem) { c.msg[mappingId] = problem; return; }
+      var reader = new FileReader();
+      reader.onload = function() {
+        $timeout(function() {
+          list.push({
+            name: fileName(file), type: file.type, size: humanSize(file.size),
+            isImage: /^image\//.test(file.type), dataUrl: reader.result,
+            content: String(reader.result).split(',')[1] || ''
+          });
+        });
+      };
+      reader.onerror = function() { $timeout(function() { c.msg[mappingId] = 'This file could not be read.'; }); };
+      reader.readAsDataURL(file);
+    });
+  };
+  c.unstage = function(mappingId, index) {
+    (c.staged[mappingId] || []).splice(index, 1);
+  };
+  c.clearStaged = function(mappingId) {
+    c.staged[mappingId] = [];
+    c.msg[mappingId] = '';
+  };
+
+  /* Block 7, step 2 of an upload: the Submit button. The files go one after another into a private draft on the
+     server, then the draft is submitted, and only then the compliance team is told. */
+  function fail(mappingId, text) {
+    c.busy[mappingId] = false;
+    c.msg[mappingId] = text;
+    c.toast = { type: 'error', text: text };
+  }
+  function checkAnswer(mappingId, fresh) {
+    if (!fresh) { fail(mappingId, 'The server did not answer. Look for "[CPM]" lines in System Log > All, and check that every Script Include is saved.'); return false; }
+    if (fresh.error) { fail(mappingId, fresh.error); return false; }
+    if (!fresh.upload) { fail(mappingId, 'The server did not confirm the request. The widget Server script may be out of date.'); return false; }
+    if (!fresh.upload.ok) { fail(mappingId, fresh.upload.message); return false; }
+    return true;
+  }
+  function sendFile(mappingId, list, index) {
+    if (index >= list.length) return submit(mappingId);
+    c.progress[mappingId] = 'Sending file ' + (index + 1) + ' of ' + list.length + '…';
+    var file = list[index];
+    ask({ action: 'addFile', mapping: mappingId, fileName: file.name, contentType: file.type, content: file.content, first: index === 0 })
+      .then(function(fresh) {
+        if (checkAnswer(mappingId, fresh)) sendFile(mappingId, list, index + 1);
+      }, function() {
+        fail(mappingId, 'The request failed. Check your connection, or that the files are smaller than 3 MB.');
+      });
+  }
+  function submit(mappingId) {
+    c.progress[mappingId] = 'Submitting…';
+    refresh({ action: 'submit', mapping: mappingId }).then(function(fresh) {
+      if (!checkAnswer(mappingId, fresh)) return;
+      c.busy[mappingId] = false;
+      c.staged[mappingId] = [];
+      c.toast = { type: 'ok', text: 'Submitted. The compliance team will approve or reject your evidence.' };
+    }, function() {
+      fail(mappingId, 'The request failed. Please try again.');
+    });
+  }
+  c.submit = function(ctl) {
+    var list = c.staged[ctl.id] || [];
+    if (!list.length || c.busy[ctl.id]) return;
+    c.msg[ctl.id] = '';
+    c.toast = null;
+    c.busy[ctl.id] = true;
+    sendFile(ctl.id, list, 0);
+  };
+
+  /* Block 8: drag and drop, file picker and paste. The listeners sit on the document and only react to events that
+     happen inside a drop zone. They are removed when the widget is destroyed. */
+  function hasFiles(e) {
+    var types = (e.dataTransfer && e.dataTransfer.types) || [];
+    return Array.prototype.indexOf.call(types, 'Files') > -1;
+  }
+  function zoneOf(e) {
+    return e.target && e.target.closest ? e.target.closest('.cpm-drop') : null;
+  }
+  /* The id of the control a drop zone belongs to (it is written on the hidden file input inside the zone). */
+  function mappingOf(zone) {
+    var input = zone.querySelector('.cpm-picker');
+    return input ? input.getAttribute('data-mapping') : '';
+  }
+  function choose(mappingId, fileList) {
+    var files = Array.prototype.slice.call(fileList);
+    $scope.$apply(function() { c.stage(mappingId, files); });
+  }
+  function onDrag(e) {
+    if (!hasFiles(e) || !document.querySelector('.cpm')) return;
+    var zone = zoneOf(e);
+    e.preventDefault();   /* also stops the browser from opening a file dropped outside a zone */
+    if (e.dataTransfer) e.dataTransfer.dropEffect = zone ? 'copy' : 'none';
+    if (zone) zone.classList.add('over');
+  }
+  function onLeave(e) {
+    var zone = zoneOf(e);
+    if (zone) zone.classList.remove('over');
+  }
+  function onDrop(e) {
+    if (!hasFiles(e) || !document.querySelector('.cpm')) return;
+    e.preventDefault();
+    var zone = zoneOf(e);
+    if (!zone) return;
+    zone.classList.remove('over');
+    choose(mappingOf(zone), e.dataTransfer.files);
+  }
+  function onChange(e) {
+    if (!e.target.classList || !e.target.classList.contains('cpm-picker')) return;
+    var mappingId = e.target.getAttribute('data-mapping');
+    var files = Array.prototype.slice.call(e.target.files);
+    e.target.value = '';
+    $scope.$apply(function() { c.stage(mappingId, files); });
+  }
+  function onPaste(e) {
+    if (!e.clipboardData || !e.clipboardData.files.length) return;
+    var zone = document.querySelector('.cpm .cpm-ctl:hover .cpm-drop');
+    if (!zone) return;
+    e.preventDefault();
+    choose(mappingOf(zone), e.clipboardData.files);
+  }
+  document.addEventListener('dragenter', onDrag);
+  document.addEventListener('dragover', onDrag);
+  document.addEventListener('dragleave', onLeave);
+  document.addEventListener('drop', onDrop);
+  document.addEventListener('change', onChange);
+  document.addEventListener('paste', onPaste);
+  $scope.$on('$destroy', function() {
+    document.removeEventListener('dragenter', onDrag);
+    document.removeEventListener('dragover', onDrag);
+    document.removeEventListener('dragleave', onLeave);
+    document.removeEventListener('drop', onDrop);
+    document.removeEventListener('change', onChange);
+    document.removeEventListener('paste', onPaste);
+  });
+};]]></client_script>
+        <controller_as>c</controller_as>
+        <css>/* Role: the colours and sizes used everywhere. Change a colour here and the whole portal follows. */&#13;
+.cpm {&#13;
+  --ink: #0f172a; --muted: #64748b; --line: #e2e8f0; --card: #fff;&#13;
+  --ok: #16a34a; --warn: #f59e0b; --bad: #ef4444; --info: #3b82f6; --none: #94a3b8; --brand: #1e3a8a;&#13;
+  color: var(--ink);&#13;
+}&#13;
+.cpm * { box-sizing: border-box; }&#13;
+.cpm a { color: inherit; }&#13;
+.cpm a:hover { text-decoration: none; }&#13;
+&#13;
+/* Role: messages at the top of the page. */&#13;
+.cpm-alert { background: #fef2f2; color: #991b1b; padding: 14px 18px; border-radius: 12px; margin-bottom: 14px; }&#13;
+.cpm-notice, .cpm-toast { padding: 12px 18px; border-radius: 12px; margin-bottom: 14px; font-size: 14px; }&#13;
+.cpm-notice.ok, .cpm-toast.ok { background: #dcfce7; color: #166534; }&#13;
+.cpm-notice.error, .cpm-toast.error { background: #fee2e2; color: #991b1b; }&#13;
+.cpm-toast a { float: right; font-weight: 700; margin-left: 12px; }&#13;
+.cpm-version { font-size: 11px; color: var(--muted); text-align: right; margin-top: 24px; }&#13;
+&#13;
+/* Role: the dark title banner with the coverage ring. */&#13;
+.cpm-hero { display: flex; justify-content: space-between; align-items: center; padding: 26px 30px; margin-bottom: 18px;&#13;
+  border-radius: 18px; color: #fff; background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 60%, #0e7490 100%); }&#13;
+.cpm-hero h2 { margin: 4px 0; font-size: 28px; color: #fff; }&#13;
+.cpm-hero p { margin: 0; opacity: .8; }&#13;
+.cpm-eyebrow { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; opacity: .7; }&#13;
+.cpm-hero-ring { position: relative; width: 96px; height: 96px; flex: none; }&#13;
+.cpm-hero-ring svg { width: 100%; height: 100%; }&#13;
+.cpm-hero-label { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }&#13;
+.cpm-hero-label b { font-size: 22px; line-height: 1; }&#13;
+.cpm-hero-label span { font-size: 10px; opacity: .7; }&#13;
+.cpm-hero .track { fill: none; stroke: rgba(255,255,255,.2); stroke-width: 7; }&#13;
+.cpm-hero .bar { fill: none; stroke: #5eead4; stroke-width: 7; stroke-linecap: round; }&#13;
+&#13;
+/* Role: the row of headline numbers. A tile with the class "clickable" opens its list. */&#13;
+.cpm-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 14px; margin-bottom: 20px; }&#13;
+.cpm-kpi { display: block; background: var(--card); border: 1px solid var(--line); border-left: 4px solid var(--brand);&#13;
+  border-radius: 14px; padding: 14px 16px; }&#13;
+.cpm-kpi b { display: block; font-size: 28px; line-height: 1.1; }&#13;
+.cpm-kpi span { font-size: 12px; color: var(--muted); }&#13;
+.cpm-kpi.warn { border-left-color: var(--warn); } .cpm-kpi.bad { border-left-color: var(--bad); }&#13;
+.cpm-kpi.info { border-left-color: var(--info); } .cpm-kpi.none { border-left-color: var(--none); }&#13;
+.cpm-kpi.clickable { cursor: pointer; transition: transform .15s, box-shadow .15s; }&#13;
+.cpm-kpi.clickable:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(15,23,42,.1); }&#13;
+&#13;
+/* Role: the tabs of the compliance team. */&#13;
+.cpm-tabs { display: flex; gap: 8px; margin: 4px 0 16px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }&#13;
+.cpm-tabs button { border: 0; background: transparent; padding: 10px 16px; font-weight: 600; color: var(--muted); border-bottom: 3px solid transparent; cursor: pointer; }&#13;
+.cpm-tabs button.active { color: var(--brand); border-bottom-color: var(--brand); }&#13;
+.cpm-count { display: inline-block; min-width: 22px; text-align: center; background: var(--info); color: #fff; border-radius: 999px; font-size: 11px; padding: 1px 7px; margin-left: 4px; }&#13;
+&#13;
+/* Role: empty states. */&#13;
+.cpm-empty { text-align: center; color: var(--muted); padding: 28px; background: var(--card); border: 1px dashed var(--line); border-radius: 14px; margin-bottom: 14px; }&#13;
+&#13;
+/* Role: the review inbox cards and their buttons. */&#13;
+.cpm-review { background: var(--card); border: 1px solid var(--line); border-left: 4px solid var(--info); border-radius: 16px; padding: 16px 20px; margin-bottom: 12px; }&#13;
+.cpm-review-top { display: flex; justify-content: space-between; gap: 12px; }&#13;
+.cpm-review-title { font-weight: 600; font-size: 16px; }&#13;
+.cpm-age { font-size: 12px; padding: 3px 10px; border-radius: 999px; background: #f1f5f9; color: #475569; align-self: flex-start; white-space: nowrap; }&#13;
+.cpm-age.late { background: #fee2e2; color: #991b1b; }&#13;
+.cpm-actions { display: flex; gap: 10px; margin-top: 12px; }&#13;
+.cpm-btn { border: 0; border-radius: 10px; padding: 8px 18px; font-weight: 600; color: #fff; cursor: pointer; }&#13;
+.cpm-btn.ok { background: var(--ok); } .cpm-btn.bad { background: var(--bad); }&#13;
+.cpm-btn.plain { background: #e2e8f0; color: var(--ink); }&#13;
+.cpm-btn[disabled] { opacity: .5; cursor: default; }&#13;
+.cpm-rejectbox { margin-top: 10px; }&#13;
+.cpm-rejectbox textarea { width: 100%; border: 1px solid #cbd5e1; border-radius: 10px; padding: 8px 12px; margin-bottom: 8px; }&#13;
+&#13;
+/* Role: panels (follow-up lists, framework coverage). */&#13;
+.cpm-panel { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 16px 20px; margin-bottom: 16px; }&#13;
+.cpm-panel h4 { margin: 0 0 12px; font-size: 15px; }&#13;
+.cpm-fw { margin-bottom: 10px; }&#13;
+.cpm-fw-line { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 4px; }&#13;
+&#13;
+/* Role: the follow-up tables: one row per control, with a status badge and a flag for missing owners. */&#13;
+.cpm-tablewrap { overflow-x: auto; margin-top: 8px; }&#13;
+.cpm-table { width: 100%; border-collapse: collapse; font-size: 14px; }&#13;
+.cpm-table th { text-align: left; font-size: 12px; color: var(--muted); font-weight: 600; padding: 8px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }&#13;
+.cpm-table td { padding: 10px; border-bottom: 1px solid #f1f5f9; vertical-align: top; }&#13;
+.cpm-table tr:hover td { background: #f8fafc; }&#13;
+.cpm-table a { color: var(--brand); font-weight: 600; }&#13;
+.cpm-status { font-size: 12px; font-weight: 600; padding: 2px 10px; border-radius: 999px; background: #f1f5f9; white-space: nowrap; }&#13;
+.cpm-status.st-missing, .cpm-status.st-rejected, .cpm-status.st-expired, .cpm-status.st-uncovered { background: #fee2e2; color: #991b1b; }&#13;
+.cpm-status.st-approved { background: #fef3c7; color: #92400e; }&#13;
+.cpm-status.st-awaiting { background: #dbeafe; color: #1e40af; }&#13;
+.cpm-flag { display: inline-block; font-size: 12px; font-weight: 700; padding: 2px 10px; border-radius: 999px; background: #fef3c7; color: #92400e; white-space: nowrap; }&#13;
+&#13;
+/* Role: filter chips and search bar. */&#13;
+.cpm-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }&#13;
+.cpm-chips { margin-bottom: 6px; }&#13;
+.cpm-chips button { border: 1px solid #cbd5e1; background: var(--card); border-radius: 999px; padding: 6px 14px; margin: 0 6px 6px 0; font-size: 13px; cursor: pointer; }&#13;
+.cpm-chips button.active { background: var(--brand); border-color: var(--brand); color: #fff; }&#13;
+.cpm-searchbar { display: flex; gap: 8px; align-items: center; }&#13;
+.cpm-search { border: 1px solid #cbd5e1; border-radius: 10px; padding: 9px 14px; min-width: 280px; }&#13;
+.cpm-search:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 3px rgba(30,58,138,.15); }&#13;
+&#13;
+/* Role: the service cards. */&#13;
+.cpm-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; margin: 12px 0 22px; }&#13;
+.cpm-card { display: block; background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 18px; transition: transform .15s, box-shadow .15s; }&#13;
+.cpm-card:hover { transform: translateY(-3px); box-shadow: 0 12px 28px rgba(15,23,42,.12); }&#13;
+.cpm-card-head { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }&#13;
+.cpm-card-title { font-weight: 600; font-size: 16px; margin-bottom: 4px; }&#13;
+.cpm-card-foot { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); margin-top: 10px; }&#13;
+&#13;
+/* Role: the progress rings, drawn with SVG and coloured by risk. */&#13;
+.cpm-ring { width: 64px; height: 64px; flex: none; }&#13;
+.cpm-ring.big { width: 84px; height: 84px; }&#13;
+.cpm-ring .track { fill: none; stroke: var(--line); stroke-width: 7; }&#13;
+.cpm-ring .bar { fill: none; stroke-width: 7; stroke-linecap: round; }&#13;
+.cpm-ring text { font-size: 15px; font-weight: 700; fill: var(--ink); }&#13;
+.risk-green .bar { stroke: var(--ok); } .risk-yellow .bar { stroke: var(--warn); }&#13;
+.risk-red .bar { stroke: var(--bad); } .risk-not_assessed .bar { stroke: var(--none); }&#13;
+.cpm-pill { font-size: 11px; font-weight: 600; padding: 2px 10px; border-radius: 999px; background: #f1f5f9; color: #475569; }&#13;
+&#13;
+/* Role: the split bar: approved / expiring / in review / rejected / missing at a glance. */&#13;
+.cpm-seg { display: flex; height: 8px; border-radius: 999px; overflow: hidden; background: var(--line); }&#13;
+.cpm-seg i { display: block; flex: 0 1 0; }&#13;
+.cpm-seg .ok { background: var(--ok); } .cpm-seg .warn { background: var(--warn); } .cpm-seg .info { background: var(--info); }&#13;
+.cpm-seg .bad { background: var(--bad); } .cpm-seg .none { background: var(--none); }&#13;
+&#13;
+/* Role: header and control cards of the page of one CI or service. */&#13;
+.cpm-back { font-size: 13px; color: var(--muted); }&#13;
+.cpm-head { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; background: var(--card); border: 1px solid var(--line);&#13;
+  border-radius: 18px; padding: 18px 22px; margin: 10px 0 16px; }&#13;
+.cpm-head-main { flex: 1; min-width: 220px; }&#13;
+.cpm-head h3 { margin: 0 0 2px; }&#13;
+.cpm-sub { font-size: 12px; color: var(--muted); margin-bottom: 8px; }&#13;
+.cpm-head-stats { display: flex; gap: 22px; text-align: center; }&#13;
+.cpm-head-stats b { display: block; font-size: 22px; line-height: 1.1; }&#13;
+.cpm-head-stats span { font-size: 11px; color: var(--muted); }&#13;
+.cpm-ctl { background: var(--card); border: 1px solid var(--line); border-left: 4px solid var(--none); border-radius: 14px; padding: 14px 18px; margin-bottom: 12px; }&#13;
+.cpm-ctl.st-approved { border-left-color: var(--ok); } .cpm-ctl.st-expiring { border-left-color: var(--warn); }&#13;
+.cpm-ctl.st-awaiting { border-left-color: var(--info); }&#13;
+.cpm-ctl.st-rejected, .cpm-ctl.st-missing, .cpm-ctl.st-expired { border-left-color: var(--bad); }&#13;
+.cpm-ctl-top { display: flex; justify-content: space-between; gap: 12px; }&#13;
+.cpm-state { font-size: 12px; font-weight: 600; white-space: nowrap; }&#13;
+.cpm-text { font-size: 13px; margin: 8px 0 4px; }&#13;
+.cpm-guide { font-size: 13px; color: var(--muted); margin: 6px 0; }&#13;
+.cpm-reject { background: #fef2f2; color: #991b1b; border-radius: 10px; padding: 10px 14px; font-size: 13px; margin: 8px 0; }&#13;
+.cpm-wait { background: #eff6ff; color: #1e40af; border-radius: 10px; padding: 10px 14px; font-size: 13px; margin: 8px 0; }&#13;
+.cpm-why { background: #f8fafc; border: 1px dashed var(--line); color: var(--muted); border-radius: 10px; padding: 10px 14px; font-size: 13px; margin: 8px 0; }&#13;
+.cpm-debug { font: 11px/1.4 monospace; background: #fefce8; color: #854d0e; border-radius: 8px; padding: 6px 10px; margin-top: 6px; }&#13;
+&#13;
+/* Role: the drop zone, and the box of chosen files with its Submit button. */&#13;
+.cpm-drop { display: block; margin: 8px 0; padding: 14px; border: 2px dashed #cbd5e1; border-radius: 12px; text-align: center;&#13;
+  font-size: 13px; color: #475569; cursor: pointer; }&#13;
+.cpm-drop:hover, .cpm-drop:focus, .cpm-drop.over { border-color: var(--brand); background: #eff6ff; outline: none; }&#13;
+.cpm-staged { background: #f8fafc; border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; margin: 8px 0; }&#13;
+.cpm-staged-title { font-size: 13px; font-weight: 600; margin-bottom: 8px; }&#13;
+.cpm-staged-list { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; }&#13;
+.cpm-chip { display: flex; align-items: center; gap: 8px; background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 6px 8px; font-size: 12px; max-width: 280px; }&#13;
+.cpm-chip img, .cpm-chip-pdf { width: 46px; height: 36px; object-fit: cover; border-radius: 6px; flex: none; }&#13;
+.cpm-chip-pdf { display: flex; align-items: center; justify-content: center; background: #e2e8f0; font-weight: 700; }&#13;
+.cpm-chip b { display: block; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }&#13;
+.cpm-chip small { color: var(--muted); }&#13;
+.cpm-chip button { border: 0; background: transparent; font-size: 18px; line-height: 1; color: #64748b; cursor: pointer; }&#13;
+.cpm-staged-actions { display: flex; gap: 10px; }&#13;
+.cpm-error { color: #b91c1c; font-size: 13px; margin: 6px 0; }&#13;
+&#13;
+/* Role: evidence history lines, file buttons and the image viewer. */&#13;
+.cpm-ev { border-top: 1px solid #f1f5f9; padding: 8px 0; font-size: 13px; }&#13;
+.cpm-tag { font-size: 11px; font-weight: 500; padding: 1px 8px; border-radius: 999px; background: #e2e8f0; }&#13;
+.cpm-tag.st-approved { background: #dcfce7; color: #166534; } .cpm-tag.st-pending { background: #dbeafe; color: #1e40af; }&#13;
+.cpm-tag.st-rejected { background: #fee2e2; color: #991b1b; }&#13;
+.cpm-files { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0; }&#13;
+.cpm-filebtn { border: 1px solid #cbd5e1; background: #fff; border-radius: 999px; padding: 4px 12px; font-size: 12px; cursor: pointer; max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }&#13;
+.cpm-filebtn:hover { border-color: var(--brand); color: var(--brand); }&#13;
+.cpm-lightbox { position: fixed; inset: 0; background: rgba(15,23,42,.85); z-index: 2000; display: flex; flex-direction: column;&#13;
+  align-items: center; justify-content: center; color: #fff; font-size: 13px; cursor: pointer; padding: 24px; }&#13;
+.cpm-lightbox img { max-width: 92vw; max-height: 82vh; border-radius: 10px; background: #fff; margin-bottom: 10px; }</css>
+        <data_table>sp_instance</data_table>
+        <demo_data/>
+        <description/>
+        <docs/>
+        <field_list/>
+        <has_preview>false</has_preview>
+        <id>cpm_app</id>
+        <internal>false</internal>
+        <link/>
+        <name>CPM Compliance</name>
+        <option_schema/>
+        <public>false</public>
+        <roles/>
+        <script><![CDATA[// Role: decides which screen to show and which data it needs. The counting is done by CPMStats, the decisions by
+//       CPMReview and the upload workflow by CPMEvidence, so this script only routes.
+//       Everything runs inside try/catch: if something breaks, the page shows the error instead of staying silent.
+(function() {
+  var LIST_LIMIT = 200;   // each follow-up list shows its first 200 rows; the real total is always displayed
+  var access, stats, review, evidence;
+
+  data.serverBuild = '';
+  data.error = '';
+  data.notice = null;
+  data.upload = null;
+  data.file = null;
+
+  try {
+    access = new CPMAccess();
+    stats = new CPMStats();
+    review = new CPMReview();
+    evidence = new CPMEvidence();
+    data.serverBuild = stats.VERSION;   // compared with the widget build at the bottom of the page
+    route();
+  } catch (e) {
+    data.error = 'Unexpected error: ' + e.message + '. Look for "[CPM]" in System Log > All, and check that all Script Includes are saved in this application.';
+    gs.error('[CPM] widget failed: ' + e.message);
+  }
+
+  // Role: reads the request, performs the requested action, then loads the screen to display.
+  function route() {
+    // --- Block 1: which page was asked for. The browser repeats these parameters on every call. ---
+    var targetId = param('target');
+    if (!/^[0-9a-f]{32}$/.test(targetId)) targetId = '';
+    data.params = { target: targetId, debug: param('debug') };
+    data.isAdmin = access.isAdmin();
+    data.me = gs.getUserID();
+    data.debug = data.params.debug == '1';   // add &debug=1 to the URL to see the raw values behind each control
+
+    var action = input && input.action;
+
+    // --- Block 2: light actions. They answer at once, without loading a screen. ---
+    if (action == 'addFile') {
+      var file = {
+        name: String(input.fileName || '').replace(/[\\\/]/g, '_').substring(0, 100),
+        type: String(input.contentType || '').toLowerCase()
+      };
+      data.upload = evidence.addFile(String(input.mapping || ''), file, String(input.content || ''), String(input.first) == 'true');
+      return;
+    }
+    if (action == 'file') {
+      data.file = evidence.getFile(String(input.evidence || ''), String(input.attachment || ''));
+      return;
+    }
+
+    // --- Block 3: actions that change something. The screen is reloaded afterwards. ---
+    if (action == 'submit') data.upload = evidence.submit(String(input.mapping || ''));
+    if (action == 'approve') report(review.approve(String(input.evidence || '')), 'Evidence approved.');
+    if (action == 'reject') report(review.reject(String(input.evidence || ''), String(input.comment || '')), 'Evidence rejected: the owner has been notified.');
+
+    // --- Block 4: the screen. ---
+    if (targetId) loadTarget(targetId);
+    else loadHome();
+  }
+
+  // Role: reads a parameter from the browser's last call, or from the address bar.
+  function param(name) {
+    if (input && input[name] !== undefined && input[name] !== null) return String(input[name]);
+    return $sp.getParameter(name) || '';
+  }
+
+  // Role: prepares the green or red message shown at the top of the page after a review action.
+  function report(error, okText) {
+    data.notice = error ? { type: 'error', text: error } : { type: 'ok', text: okText };
+  }
+
+  // Role: the home screen. Everybody gets "my services" and their own follow-up lists.
+  //       The compliance team also gets the whole company, the company follow-up lists and the review inbox.
+  function loadHome() {
+    data.screen = 'home';
+    data.mine = stats.posture(access.ownedTargetIds());
+    data.myFollow = stats.followUp(access.userId, LIST_LIMIT);
+    if (!data.isAdmin) return;
+
+    data.team = stats.posture(null);
+    data.team.kpi.review = stats.count('x_1929776_compli_0_evidence', 'status=pending');
+    data.inbox = stats.inbox(20);
+    data.frameworks = stats.frameworks();
+    data.follow = stats.followUp(null, LIST_LIMIT);
+  }
+
+  // Role: the page of one CI or service, after checking that the user may see it.
+  function loadTarget(id) {
+    data.screen = 'target';
+    if (!access.canViewTarget(id)) { data.error = 'You do not have access to this page.'; return; }
+    data.target = stats.detail(id);
+    if (!data.target) data.error = 'Not found.';
+  }
+})();]]></script>
+        <servicenow>false</servicenow>
+        <sys_class_name>sp_widget</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-10-22 15:09:33</sys_created_on>
+        <sys_id>1ea1151e73c81710a621f2024ab8b70c</sys_id>
+        <sys_mod_count>40</sys_mod_count>
+        <sys_name>CPM Compliance</sys_name>
+        <sys_package display_value="Compliance Posture Mapper" source="x_1929776_compli_0">f7756d0a738c9310a621f2024ab8b707</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Compliance Posture Mapper">f7756d0a738c9310a621f2024ab8b707</sys_scope>
+        <sys_update_name>sp_widget_1ea1151e73c81710a621f2024ab8b70c</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-10-27 16:48:44</sys_updated_on>
+        <template><![CDATA[<div class="cpm">
+
+  <!-- Role: messages at the top of the page: result of the last action, and errors. -->
+  <div class="cpm-toast" ng-class="c.toast.type" ng-if="c.toast">{{c.toast.text}} <a href="" ng-click="c.toast = null">×</a></div>
+  <div class="cpm-notice" ng-class="data.notice.type" ng-if="data.notice">{{data.notice.text}}</div>
+  <div class="cpm-alert" ng-if="data.error">{{data.error}}</div>
+
+  <!-- Role: warnings when one part of the app is older than the others. Each one says what to replace. -->
+  <div class="cpm-alert" ng-if="!c.build">
+    The <b>Client script</b> of this widget is not running. Replace the whole field with the latest code, keep the <b>Link</b> field empty,
+    check that <b>Controller as</b> is <code>c</code>, save, then open /cache.do and press Ctrl+F5.
+  </div>
+  <div class="cpm-alert" ng-if="c.build && data.serverBuild != c.build">
+    The <b>Script Includes</b> are out of date: the server is on build {{data.serverBuild || 'unknown'}} and this page expects build {{c.build}}. Replace CPMStats with the latest code.
+  </div>
+
+  <!-- ====================== HOME ====================== -->
+  <div ng-if="data.screen == 'home' && !data.error">
+
+    <!-- Role: title banner with the coverage ring (the whole company for the compliance team, my services for owners). -->
+    <header class="cpm-hero">
+      <div>
+        <span class="cpm-eyebrow">GRC · CSDM</span>
+        <h2>{{data.isAdmin ? 'Compliance team' : 'My compliance'}}</h2>
+        <p>{{data.isAdmin ? 'Review evidence, follow the coverage of the company, and look after your own services.' : 'The services and CIs you own, and the evidence they need.'}}</p>
+      </div>
+      <div class="cpm-hero-ring">
+        <svg viewBox="0 0 64 64">
+          <circle class="track" cx="32" cy="32" r="26"></circle>
+          <circle class="bar" cx="32" cy="32" r="26" transform="rotate(-90 32 32)"
+                  ng-attr-stroke-dasharray="{{c.hero().coverage * 1.6336}} 163.36"></circle>
+        </svg>
+        <div class="cpm-hero-label"><b>{{c.hero().coverage}}%</b><span>approved</span></div>
+      </div>
+    </header>
+
+    <!-- Role: headline numbers of the compliance team. Each tile opens the list behind it. -->
+    <section class="cpm-kpis" ng-if="data.isAdmin">
+      <div class="cpm-kpi info clickable" ng-click="c.go('review')"><b>{{data.team.kpi.review}}</b><span>To review</span></div>
+      <div class="cpm-kpi bad clickable" ng-click="c.go('follow', 'need')"><b>{{data.follow.need.count}}</b><span>Missing or rejected</span></div>
+      <div class="cpm-kpi warn clickable" ng-click="c.go('follow', 'expiring')"><b>{{data.follow.expiring.count}}</b><span>Expiring soon</span></div>
+      <div class="cpm-kpi bad clickable" ng-click="c.go('follow', 'stale')"><b>{{data.follow.stale.count}}</b><span>Stale (expired)</span></div>
+      <div class="cpm-kpi none clickable" ng-click="c.go('follow', 'noOwner')"><b>{{data.follow.noOwner.count}}</b><span>Controls without owner</span></div>
+      <div class="cpm-kpi none clickable" ng-click="c.go('follow', 'uncovered')"><b>{{data.follow.uncovered.count}}</b><span>Services without controls</span></div>
+    </section>
+
+    <!-- Role: headline numbers of an owner. The first two tiles open their list. -->
+    <section class="cpm-kpis" ng-if="!data.isAdmin && data.mine.kpi.targets">
+      <div class="cpm-kpi"><b>{{data.mine.kpi.targets}}</b><span>Services and CIs</span></div>
+      <div class="cpm-kpi bad clickable" ng-click="c.go('mine', 'need')"><b>{{data.myFollow.need.count}}</b><span>Need evidence</span></div>
+      <div class="cpm-kpi warn clickable" ng-click="c.go('mine', 'expiring')"><b>{{data.myFollow.expiring.count}}</b><span>Expiring soon</span></div>
+      <div class="cpm-kpi bad clickable" ng-click="c.go('mine', 'stale')"><b>{{data.myFollow.stale.count}}</b><span>Stale (expired)</span></div>
+      <div class="cpm-kpi info"><b>{{data.mine.kpi.awaiting}}</b><span>In review</span></div>
+    </section>
+
+    <!-- Role (compliance team only): the four tabs. -->
+    <nav class="cpm-tabs" ng-if="data.isAdmin">
+      <button ng-class="{active: c.tab == 'review'}" ng-click="c.go('review')">Review inbox <span class="cpm-count">{{data.team.kpi.review}}</span></button>
+      <button ng-class="{active: c.tab == 'follow'}" ng-click="c.go('follow')">Follow-up</button>
+      <button ng-class="{active: c.tab == 'all'}" ng-click="c.go('all')">All services</button>
+      <button ng-class="{active: c.tab == 'mine'}" ng-click="c.go('mine')">My services</button>
+    </nav>
+
+    <!-- ========== TAB: review inbox (compliance team) ========== -->
+    <section ng-if="data.isAdmin && c.tab == 'review'">
+      <div class="cpm-empty" ng-if="!data.inbox.length">Nothing is waiting for review.</div>
+
+      <article class="cpm-review" ng-repeat="e in data.inbox track by e.id">
+        <div class="cpm-review-top">
+          <div>
+            <div class="cpm-review-title">{{e.control}} <span class="cpm-tag" ng-if="e.renewal">Renewal</span></div>
+            <div class="cpm-sub">{{e.target}} · {{e.number}} · submitted by {{e.by}}</div>
+          </div>
+          <span class="cpm-age" ng-class="{late: e.ageDays > 5}">{{e.ageDays}} day{{e.ageDays == 1 ? '' : 's'}} waiting</span>
+        </div>
+
+        <p class="cpm-guide" ng-if="e.guidance"><b>Required:</b> {{e.guidance}}</p>
+
+        <!-- Role: the submitted files. A click opens the file (images in a viewer, PDFs as a download). -->
+        <div class="cpm-files">
+          <button class="cpm-filebtn" ng-repeat="f in e.files" ng-disabled="c.opening == f.id" ng-click="c.open(e.id, f)">
+            {{f.isImage ? 'View' : 'Download'}} · {{f.name}}
+          </button>
+        </div>
+
+        <!-- Role: the decision. Rejecting opens a text box, because the owner receives the reason. -->
+        <div class="cpm-actions" ng-if="e.canReview">
+          <button class="cpm-btn ok" ng-disabled="c.working[e.id]" ng-click="c.approve(e)">Approve</button>
+          <button class="cpm-btn bad" ng-disabled="c.working[e.id]" ng-click="c.rejecting[e.id] = !c.rejecting[e.id]">Reject</button>
+        </div>
+        <div class="cpm-rejectbox" ng-if="c.rejecting[e.id]">
+          <textarea ng-model="c.comment[e.id]" rows="2" placeholder="What is wrong? For example: the screenshot is blurry, or it does not show the date."></textarea>
+          <button class="cpm-btn bad" ng-disabled="c.working[e.id] || !c.comment[e.id]" ng-click="c.reject(e)">Send rejection</button>
+        </div>
+        <div class="cpm-sub" ng-if="!e.canReview">You submitted this yourself, so another reviewer must decide.</div>
+      </article>
+    </section>
+
+    <!-- ========== FOLLOW-UP LISTS: the company for the team (tab Follow-up), my own controls (tab My services and owners) ========== -->
+    <section class="cpm-panel" ng-if="c.showFollow()">
+      <h4>{{c.ctx() == 'team' ? 'Follow-up: the whole company' : 'Follow-up: my own controls'}}</h4>
+
+      <!-- Role: one button per list, with the number of rows it holds. -->
+      <div class="cpm-chips">
+        <button ng-repeat="d in c.defs()" ng-class="{active: c.section() == d.key}" ng-click="c.pick(d.key)">{{d.label}} ({{c.countOf(d.key)}})</button>
+      </div>
+
+      <div class="cpm-empty" ng-if="!c.items().length">{{c.emptyText()}}</div>
+
+      <!-- Role: the selected list. Each row opens the page of its service or CI. A control without owner is flagged. -->
+      <div class="cpm-tablewrap" ng-if="c.items().length">
+        <table class="cpm-table">
+          <thead>
+            <tr>
+              <th>Service or CI</th>
+              <th ng-if="c.section() != 'uncovered'">Control</th>
+              <th>Status</th>
+              <th>Owner</th>
+              <th>Detail</th>
+              <th ng-if="c.section() == 'noOwner' || c.section() == 'uncovered'"></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr ng-repeat="r in c.items() track by $index">
+              <td><a ng-href="?id=cpm&target={{r.targetId}}{{c.dbg()}}">{{r.target}}</a></td>
+              <td ng-if="c.section() != 'uncovered'"><b>{{r.ref}}</b> {{r.control}}</td>
+              <td><span class="cpm-status st-{{r.status}}">{{c.label[r.status]}}</span></td>
+              <td>
+                <span ng-if="r.owner">{{r.owner}}</span>
+                <span class="cpm-flag" ng-if="r.ownerFlag" title="{{r.ownerFlag}}">⚠ No owner</span>
+              </td>
+              <td ng-switch="c.section()">
+                <span ng-switch-when="expiring">Valid until {{r.until}} · {{r.daysLeft}} day{{r.daysLeft == 1 ? '' : 's'}} left</span>
+                <span ng-switch-when="stale">Expired on {{r.until}}</span>
+                <span ng-switch-when="noOwner">{{r.ownerFlag}}</span>
+                <span ng-switch-when="uncovered">No control assigned yet. {{r.ownerFlag}}</span>
+                <span ng-switch-default>{{r.status == 'rejected' ? 'The last evidence was rejected: upload it again.' : 'No evidence yet.'}}</span>
+              </td>
+              <td ng-if="c.section() == 'noOwner' || c.section() == 'uncovered'">
+                <a ng-href="/cmdb_ci.do?sys_id={{r.targetId}}" target="_blank">Open in the CMDB</a>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="cpm-sub" ng-if="c.more()">and {{c.more()}} more. The first 200 rows are listed.</div>
+    </section>
+
+    <!-- ========== TAB: all services (compliance team): coverage by framework ========== -->
+    <section class="cpm-panel" ng-if="data.isAdmin && c.tab == 'all'">
+      <h4>Coverage by framework</h4>
+      <div class="cpm-fw" ng-repeat="f in data.frameworks">
+        <div class="cpm-fw-line"><span>{{f.name}}</span><b>{{f.coverage}}%</b></div>
+        <div class="cpm-seg"><i class="ok" ng-style="{'flex-grow': f.approved}"></i><i class="none" ng-style="{'flex-grow': f.total - f.approved}"></i></div>
+      </div>
+      <div class="cpm-sub" ng-if="!data.frameworks.length">No control mapped yet.</div>
+    </section>
+
+    <div class="cpm-empty" ng-if="c.tab == 'mine' && !data.mine.rows.length">You do not own any service or CI with controls yet.</div>
+
+    <!-- ========== Search and the service cards (all services, and my services) ========== -->
+    <section class="cpm-toolbar" ng-if="c.showCards() && c.rows().length">
+      <div class="cpm-chips">
+        <button ng-repeat="f in c.filters" ng-class="{active: c.filter == f.key}" ng-click="c.filter = f.key">{{f.label}} ({{c.count(f.key)}})</button>
+      </div>
+      <!-- Role: the search bar. It filters the cards as you type, by service name or kind. -->
+      <div class="cpm-searchbar">
+        <input type="text" class="cpm-search" ng-model="c.q" placeholder="Search a service…" autocomplete="off">
+        <button class="cpm-btn plain" ng-if="c.q" ng-click="c.q = ''">Clear</button>
+      </div>
+    </section>
+    <div class="cpm-sub" ng-if="c.showCards() && c.limited()">Only the 500 weakest are listed. Type a name to narrow down, the numbers above cover everything.</div>
+
+    <section class="cpm-grid" ng-if="c.showCards() && c.rows().length">
+      <a class="cpm-card risk-{{r.risk}}" ng-repeat="r in c.rows() | filter:c.match track by r.id" ng-href="?id=cpm&target={{r.id}}{{c.dbg()}}">
+        <div class="cpm-card-head">
+          <svg viewBox="0 0 64 64" class="cpm-ring">
+            <circle class="track" cx="32" cy="32" r="26"></circle>
+            <circle class="bar" cx="32" cy="32" r="26" transform="rotate(-90 32 32)"
+                    ng-attr-stroke-dasharray="{{r.coverage * 1.6336}} 163.36"></circle>
+            <text x="32" y="37" text-anchor="middle">{{r.total ? r.coverage + '%' : '–'}}</text>
+          </svg>
+          <div>
+            <div class="cpm-card-title">{{r.name}}</div>
+            <span class="cpm-pill">{{r.kind}}</span>
+          </div>
+        </div>
+        <div class="cpm-seg" title="{{r.approved - r.expiring}} approved · {{r.expiring}} expiring · {{r.awaiting}} in review · {{r.rejected + r.expired}} rejected or stale · {{r.missing}} missing">
+          <i class="ok" ng-style="{'flex-grow': r.approved - r.expiring}"></i>
+          <i class="warn" ng-style="{'flex-grow': r.expiring}"></i>
+          <i class="info" ng-style="{'flex-grow': r.awaiting}"></i>
+          <i class="bad" ng-style="{'flex-grow': r.rejected + r.expired}"></i>
+          <i class="none" ng-style="{'flex-grow': r.missing}"></i>
+        </div>
+        <div class="cpm-card-foot">
+          <span>{{r.approved}} of {{r.total}} approved</span>
+          <span ng-if="r.missing + r.rejected + r.expired">{{r.missing + r.rejected + r.expired}} need evidence</span>
+        </div>
+      </a>
+    </section>
+    <div class="cpm-empty" ng-if="c.showCards() && c.rows().length && !(c.rows() | filter:c.match).length">No service or CI matches your search.</div>
+  </div>
+
+  <!-- ====================== ONE CI OR SERVICE ====================== -->
+  <div ng-if="data.screen == 'target' && !data.error">
+    <a class="cpm-back" ng-href="?id=cpm{{c.dbg()}}">← Back</a>
+
+    <!-- Role: header of the page: coverage ring, split bar and counts of this one target. -->
+    <header class="cpm-head risk-{{data.target.summary.risk}}">
+      <svg viewBox="0 0 64 64" class="cpm-ring big">
+        <circle class="track" cx="32" cy="32" r="26"></circle>
+        <circle class="bar" cx="32" cy="32" r="26" transform="rotate(-90 32 32)"
+                ng-attr-stroke-dasharray="{{data.target.summary.coverage * 1.6336}} 163.36"></circle>
+        <text x="32" y="37" text-anchor="middle">{{data.target.summary.total ? data.target.summary.coverage + '%' : '–'}}</text>
+      </svg>
+      <div class="cpm-head-main">
+        <h3>{{data.target.name}} <span class="cpm-tag">{{data.target.kind}}</span></h3>
+        <div class="cpm-sub">Owner: {{data.target.owner || 'not set'}}</div>
+        <div class="cpm-seg">
+          <i class="ok" ng-style="{'flex-grow': data.target.summary.approved - data.target.summary.expiring}"></i>
+          <i class="warn" ng-style="{'flex-grow': data.target.summary.expiring}"></i>
+          <i class="info" ng-style="{'flex-grow': data.target.summary.awaiting}"></i>
+          <i class="bad" ng-style="{'flex-grow': data.target.summary.rejected + data.target.summary.expired}"></i>
+          <i class="none" ng-style="{'flex-grow': data.target.summary.missing}"></i>
+        </div>
+      </div>
+      <div class="cpm-head-stats">
+        <div><b>{{data.target.summary.approved}}</b><span>approved</span></div>
+        <div><b>{{data.target.summary.awaiting}}</b><span>in review</span></div>
+        <div><b>{{data.target.summary.rejected + data.target.summary.expired}}</b><span>rejected or stale</span></div>
+        <div><b>{{data.target.summary.missing}}</b><span>missing</span></div>
+      </div>
+    </header>
+
+    <div class="cpm-empty" ng-if="!data.target.controls.length">
+      No control of this service or CI is assigned to you. An admin assigns controls in the Control form, under <b>Targets</b>.
+    </div>
+
+    <!-- Role: one card per control: what it requires, its state, the upload area and the evidence history. -->
+    <article class="cpm-ctl st-{{ctl.status}}" ng-repeat="ctl in data.target.controls track by ctl.id">
+      <div class="cpm-ctl-top">
+        <div>
+          <div class="cpm-ctl-title"><b>{{ctl.ref}}</b> {{ctl.name}}</div>
+          <div class="cpm-sub">{{ctl.framework}}</div>
+        </div>
+        <div class="cpm-state">{{c.label[ctl.status]}}<small ng-if="ctl.until && ctl.status != 'missing'"> · until {{ctl.until}}</small></div>
+      </div>
+      <p class="cpm-text" ng-if="ctl.description">{{ctl.description}}</p>
+      <p class="cpm-guide" ng-if="ctl.guidance"><b>What to provide:</b> {{ctl.guidance}}</p>
+
+      <!-- Role: the reviewer's reason, shown when the latest submission was rejected. -->
+      <div class="cpm-reject" ng-if="ctl.rejection"><b>Evidence insufficient, please re-upload.</b> {{ctl.rejection}}</div>
+      <div class="cpm-wait" ng-if="ctl.waiting">Submitted, waiting for the compliance team to approve or reject it.</div>
+
+      <!-- Role: STEP 1 of an upload. The drop zone only CHOOSES files and sends nothing. Shown to the owner only.
+           Drop files, paste a screenshot (hover this card, then Ctrl+V) or click to browse. -->
+      <label class="cpm-drop" tabindex="0" ng-if="ctl.canUpload">
+        <input type="file" class="cpm-picker" data-mapping="{{ctl.id}}" accept="image/*,application/pdf" multiple style="display:none">
+        <span>{{ctl.renew ? 'Renewal: drop the new evidence here' : 'Drop screenshots here'}}, paste (hover, then Ctrl+V) or click to browse</span>
+      </label>
+
+      <!-- Role: STEP 2 of an upload. The chosen files wait here, with a preview, until the owner clicks Submit. -->
+      <div class="cpm-staged" ng-if="ctl.canUpload && c.staged[ctl.id].length">
+        <div class="cpm-staged-title">Ready to submit: {{c.staged[ctl.id].length}} file{{c.staged[ctl.id].length == 1 ? '' : 's'}}</div>
+        <div class="cpm-staged-list">
+          <div class="cpm-chip" ng-repeat="s in c.staged[ctl.id]">
+            <img ng-if="s.isImage" ng-src="{{s.dataUrl}}" alt="">
+            <span class="cpm-chip-pdf" ng-if="!s.isImage">PDF</span>
+            <div><b>{{s.name}}</b><small>{{s.size}}</small></div>
+            <button type="button" title="Remove" ng-disabled="c.busy[ctl.id]" ng-click="c.unstage(ctl.id, $index)">×</button>
+          </div>
+        </div>
+        <div class="cpm-staged-actions">
+          <button class="cpm-btn ok" ng-disabled="c.busy[ctl.id]" ng-click="c.submit(ctl)">{{c.busy[ctl.id] ? c.progress[ctl.id] : 'Submit for review'}}</button>
+          <button class="cpm-btn plain" ng-disabled="c.busy[ctl.id]" ng-click="c.clearStaged(ctl.id)">Clear</button>
+        </div>
+      </div>
+      <div class="cpm-error" ng-if="c.msg[ctl.id]">{{c.msg[ctl.id]}}</div>
+
+      <!-- Role: explains why there is no upload area, instead of hiding it silently. -->
+      <div class="cpm-why" ng-if="!ctl.canUpload && ctl.why">{{ctl.why}}</div>
+
+      <!-- Role: debug line, shown only with &debug=1 in the URL. -->
+      <div class="cpm-debug" ng-if="data.debug">state={{ctl.status}} · mapping owner={{ctl.ownerId || 'EMPTY'}} · you={{data.me}} · isAdmin={{data.isAdmin}} · waiting={{ctl.waiting}} · canUpload={{ctl.canUpload}}</div>
+
+      <!-- Role: the history of submissions of this control. A click on a file opens it. -->
+      <div class="cpm-ev" ng-repeat="e in ctl.evidence track by e.id">
+        <div class="cpm-ev-line">
+          <b>{{e.number}}</b> <span class="cpm-tag st-{{e.status}}">{{e.label}}</span>
+          {{e.on}} · by {{e.by}}
+          <span ng-if="e.reviewedBy"> · reviewed by {{e.reviewedBy}}</span>
+          <span ng-if="e.until"> · valid until {{e.until}}</span>
+        </div>
+        <div class="cpm-files">
+          <button class="cpm-filebtn" ng-repeat="f in e.files" ng-disabled="c.opening == f.id" ng-click="c.open(e.id, f)">
+            {{f.isImage ? 'View' : 'Download'}} · {{f.name}}
+          </button>
+        </div>
+      </div>
+    </article>
+  </div>
+
+  <!-- Role: the image viewer. A click anywhere closes it. -->
+  <div class="cpm-lightbox" ng-if="c.preview" ng-click="c.preview = null">
+    <img ng-src="{{c.preview.src}}" alt="{{c.preview.name}}">
+    <div>{{c.preview.name}} · click to close</div>
+  </div>
+
+  <!-- Role: build stamps. If the two numbers differ, one part of the app was not updated. -->
+  <div class="cpm-version">widget build {{c.build || '?'}} · server build {{data.serverBuild || '?'}}</div>
+</div>]]></template>
+    </sp_widget>
+</record_update>

@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?><database>
+    <element attributes="enforce_dot_walk_cross_scope_access=true" db_object_id="7e4ef65673085710a621f2024ab8b7ac" label="Control" max_length="40" name="x_1929776_compli_0_control" type="collection">
+        <element label="Reference" max_length="40" name="reference" type="string"/>
+        <element label="Targets" max_length="40" name="targets" reference="cmdb_ci" type="glide_list"/>
+        <element default="What the owner should upload" label="Guidance" max_length="1000" name="guidance" type="string"/>
+        <element choice="1" label="Framework" max_length="255" name="framework" type="choice">
+            <choice>
+                <element inactive_on_update="false" label="ISO 27001" sequence="0" value="iso_27001"/>
+                <element inactive_on_update="false" label="PCI DSS" sequence="3" value="pci_dss"/>
+                <element inactive_on_update="false" label="Internal" sequence="5" value="internal"/>
+                <element inactive_on_update="false" label="SOC 2" sequence="1" value="soc_2"/>
+                <element inactive_on_update="false" label="NIST CSF" sequence="2" value="nist_csf"/>
+                <element inactive_on_update="false" label="GDPR" sequence="4" value="gdpr"/>
+            </choice>
+        </element>
+        <element label="Name" mandatory="true" max_length="100" name="name" type="string"/>
+        <element choice="3" default="upload" label="Method" max_length="255" name="method" type="choice">
+            <choice>
+                <element inactive_on_update="false" label="Automatc" sequence="1" value="automatc"/>
+                <element inactive_on_update="false" label="Upload" sequence="0" value="upload"/>
+            </choice>
+        </element>
+        <element choice="3" default="cmdb_ci_service" label="Applies to table" max_length="40" name="applies_to_table" read_only="true" read_only_option="strict_read_only" type="table_name">
+            <choice/>
+        </element>
+        <element label="Pass condition" max_length="40" name="pass_condition" type="conditions"/>
+        <element attributes="edge_encryption_enabled=true" default="javascript:global.getNextObjNumberPadded();" label="Number" max_length="40" name="number" type="string"/>
+        <element default="true" label="Active" max_length="255" name="active" type="boolean"/>
+        <element default="365" label="Validity days" max_length="255" name="validity_days" type="integer"/>
+        <element choice="3" default="cmdb_ci_service" label="Applies to" max_length="40" name="applies_to" type="conditions">
+            <choice/>
+        </element>
+        <element default="What the control requires" label="Description" max_length="1000" name="description" type="string"/>
+    </element>
+</database>

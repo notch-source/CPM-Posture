@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_email">
+    <sys_script_email action="INSERT_OR_UPDATE">
+        <name>cpm_mail</name>
+        <new_lines_to_html>false</new_lines_to_html>
+        <script><![CDATA[// Role: one email script for the three notifications. It picks the right text from the event that triggered it.
+(function runMailScript(current, template, email, email_action, event) {
+  var notify = new CPMNotify();
+  var name = event.name + '';
+  if (name == 'x_1929776_compli_0.owner.digest') template.print(notify.ownerDigest(event.parm1 + '', event.parm2 + ''));
+  else if (name == 'x_1929776_compli_0.evidence.rejected') template.print(notify.rejection(current));
+  else if (name == 'x_1929776_compli_0.evidence.submitted') template.print(notify.submitted(current));
+})(current, template, email, email_action, event);]]></script>
+        <sys_class_name>sys_script_email</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-10-25 14:06:26</sys_created_on>
+        <sys_id>0870689b73c05310a621f2024ab8b714</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>cpm_mail</sys_name>
+        <sys_package display_value="Compliance Posture Mapper" source="x_1929776_compli_0">f7756d0a738c9310a621f2024ab8b707</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Compliance Posture Mapper">f7756d0a738c9310a621f2024ab8b707</sys_scope>
+        <sys_update_name>sys_script_email_0870689b73c05310a621f2024ab8b714</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-10-25 14:06:26</sys_updated_on>
+    </sys_script_email>
+</record_update>

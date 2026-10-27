@@ -1,0 +1,200 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_1929776_compli_0.CPMEvidence</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description/>
+        <mobile_callable>false</mobile_callable>
+        <name>CPMEvidence</name>
+        <sandbox_callable>false</sandbox_callable>
+        <script><![CDATA[// Role: the owner's upload workflow, in two steps:
+//       1. addFile() puts a file in a private DRAFT (nobody else sees it, nothing is announced);
+//       2. submit()  turns the draft into a pending submission, moves the control to "Awaiting review"
+//                    and notifies the compliance team.
+//       It also lets users open a submitted file (getFile), because the app has no ACLs and the usual
+//       attachment links would be refused.
+var CPMEvidence = Class.create();
+CPMEvidence.prototype = {
+  SUBMITTED_EVENT: 'x_1929776_compli_0.evidence.submitted',
+  MAX_FILES: 10,
+
+  // Role: the first characters (in base64) that every genuine file of each type starts with.
+  //       A file that claims to be a PNG but does not start like one is refused.
+  SIGNATURES: {
+    'image/png': 'iVBORw0KGgo',
+    'image/jpeg': '/9j/',
+    'image/gif': 'R0lGOD',
+    'image/webp': 'UklGR',
+    'application/pdf': 'JVBERi0'
+  },
+
+  initialize: function() {
+    this.util = new CPMUtil();
+    this.access = new CPMAccess();
+  },
+
+  // Role: can an owner send evidence for a control in this state?
+  //       Yes when it is missing, rejected or expired, and when it is approved but inside the renewal window.
+  canSubmit: function(state, validUntil) {
+    if (state == 'approved') return !!validUntil && validUntil <= this.util.horizon();
+    return state == 'missing' || state == 'rejected' || state == 'expired';
+  },
+
+  // Role: is a submission of this control already waiting for the compliance team?
+  hasPending: function(mappingId) {
+    var gr = new GlideRecord('x_1929776_compli_0_evidence');
+    gr.addQuery('mapping', mappingId);
+    gr.addQuery('status', 'pending');
+    gr.setLimit(1);
+    gr.query();
+    return gr.hasNext();
+  },
+
+  // Role: step 1. Adds one file to the owner's draft. "first" is true for the first file of a submission,
+  //       which throws away any older draft so a retry never duplicates files. Returns { ok, message }.
+  addFile: function(mappingId, file, content, first) {
+    var checked = this._checkOwner(mappingId);
+    if (checked.error) return this._fail(checked.error);
+    var problem = this._validate(file, content);
+    if (problem) return this._fail(problem);
+
+    if (first) {
+      var old = this._draftFor(mappingId);
+      if (old) old.deleteRecord();
+    }
+    var draft = this._draftFor(mappingId) || this._createDraft(mappingId);
+    if (this._countFiles(draft) >= this.MAX_FILES)
+      return this._fail('A submission can hold up to ' + this.MAX_FILES + ' files.');
+
+    var saved = new GlideSysAttachment().writeBase64(draft, file.name, file.type, content);
+    if (!saved) return this._fail('The file could not be saved.');
+    return { ok: true, message: 'File received.' };
+  },
+
+  // Role: step 2. Sends the draft to the compliance team. Returns { ok, message }.
+  submit: function(mappingId) {
+    var checked = this._checkOwner(mappingId);
+    if (checked.error) return this._fail(checked.error);
+    var draft = this._draftFor(mappingId);
+    if (!draft || !this._countFiles(draft)) return this._fail('Add at least one file before submitting.');
+
+    draft.setValue('status', 'pending');
+    draft.setValue('submitted_on', new GlideDateTime().getValue());
+    draft.update();
+
+    // A renewal keeps its Approved state until the new proof is accepted. Anything else goes to Awaiting review.
+    if (checked.mapping.getValue('state') != 'approved') {
+      checked.mapping.setValue('state', 'awaiting');
+      checked.mapping.update();
+    }
+    gs.eventQueue(this.SUBMITTED_EVENT, draft, '', '');
+    return { ok: true, message: 'Submitted for review.' };
+  },
+
+  // Role: returns the content of one submitted file (base64) so the portal can show it.
+  //       The compliance team may open any file, an owner only the files of their own controls.
+  getFile: function(evidenceId, attachmentId) {
+    var evidence = new GlideRecord('x_1929776_compli_0_evidence');
+    if (!evidenceId || !evidence.get(evidenceId) || evidence.getValue('status') == 'draft')
+      return { ok: false, message: 'This file is not available.' };
+    var mapping = new GlideRecord('x_1929776_compli_0_mapping');
+    if (!mapping.get(evidence.getValue('mapping')) || !this.access.canSee(mapping))
+      return { ok: false, message: 'You cannot open this file.' };
+
+    var att = new GlideSysAttachment().getAttachments('x_1929776_compli_0_evidence', evidenceId);
+    while (att.next()) {
+      if (att.getUniqueValue() != attachmentId) continue;
+      return {
+        ok: true,
+        name: att.getValue('file_name'),
+        type: att.getValue('content_type') || 'application/octet-stream',
+        content: new GlideSysAttachment().getContentBase64(att)
+      };
+    }
+    return { ok: false, message: 'File not found.' };
+  },
+
+  // Role: nightly. Deletes drafts that were never submitted (older than one day).
+  cleanupDrafts: function() {
+    var gr = new GlideRecord('x_1929776_compli_0_evidence');
+    gr.addQuery('status', 'draft');
+    gr.addQuery('sys_created_on', '<', gs.daysAgoStart(1));
+    gr.query();
+    while (gr.next()) gr.deleteRecord();
+  },
+
+  // Role: loads the mapping and checks everything that must be true for this user to upload for it.
+  _checkOwner: function(mappingId) {
+    var mapping = new GlideRecord('x_1929776_compli_0_mapping');
+    if (!mappingId || !mapping.get(mappingId)) return { error: 'This control was not found.' };
+    if (!this.access.isOwnerOf(mapping)) return { error: 'Only the owner of this control can upload evidence for it.' };
+    if (mapping.getValue('active') != '1' || !this.canSubmit(mapping.getValue('state'), mapping.getValue('valid_until')))
+      return { error: 'This control cannot accept evidence right now.' };
+    if (this.hasPending(mappingId)) return { error: 'A submission is already waiting for review.' };
+    return { mapping: mapping };
+  },
+
+  // Role: server-side check of a file's name, type, content and size. The browser checks too, but is never trusted.
+  _validate: function(file, content) {
+    var maxMb = this.util.intProp('max_file_mb', 3);
+    if (!file.name) return 'The file name is missing.';
+    if (!this.SIGNATURES[file.type]) return 'Only images (PNG, JPG, GIF, WEBP) and PDF files are accepted.';
+    if (!/\.(png|jpe?g|gif|webp|pdf)$/i.test(file.name)) return 'This file extension is not allowed.';
+    if (!content) return 'The file is empty.';
+    if (content.indexOf(this.SIGNATURES[file.type]) !== 0) return 'The content of the file does not match its type.';
+    if (Math.floor(content.length * 3 / 4) > maxMb * 1024 * 1024) return 'The file is larger than ' + maxMb + ' MB.';
+    return '';
+  },
+
+  // Role: the current user's draft for a mapping, if there is one.
+  _draftFor: function(mappingId) {
+    var gr = new GlideRecord('x_1929776_compli_0_evidence');
+    gr.addQuery('mapping', mappingId);
+    gr.addQuery('status', 'draft');
+    gr.addQuery('submitted_by', gs.getUserID());
+    gr.setLimit(1);
+    gr.query();
+    return gr.next() ? gr : null;
+  },
+
+  // Role: opens an empty draft for a mapping.
+  _createDraft: function(mappingId) {
+    var gr = new GlideRecord('x_1929776_compli_0_evidence');
+    gr.initialize();
+    gr.setValue('mapping', mappingId);
+    gr.setValue('status', 'draft');
+    gr.setValue('submitted_by', gs.getUserID());
+    gr.insert();
+    return gr;
+  },
+
+  // Role: how many files a draft already holds.
+  _countFiles: function(evidence) {
+    var n = 0;
+    var att = new GlideSysAttachment().getAttachments('x_1929776_compli_0_evidence', evidence.getUniqueValue());
+    while (att.next()) n++;
+    return n;
+  },
+
+  _fail: function(message) {
+    return { ok: false, message: message };
+  },
+
+  type: 'CPMEvidence'
+};]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-10-25 13:49:41</sys_created_on>
+        <sys_id>edcc149373c05310a621f2024ab8b723</sys_id>
+        <sys_mod_count>12</sys_mod_count>
+        <sys_name>CPMEvidence</sys_name>
+        <sys_package display_value="Compliance Posture Mapper" source="x_1929776_compli_0">f7756d0a738c9310a621f2024ab8b707</sys_package>
+        <sys_policy>read</sys_policy>
+        <sys_scope display_value="Compliance Posture Mapper">f7756d0a738c9310a621f2024ab8b707</sys_scope>
+        <sys_update_name>sys_script_include_edcc149373c05310a621f2024ab8b723</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-10-27 16:45:51</sys_updated_on>
+    </sys_script_include>
+</record_update>

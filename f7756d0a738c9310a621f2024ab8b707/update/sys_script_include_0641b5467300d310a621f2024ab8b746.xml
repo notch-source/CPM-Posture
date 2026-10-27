@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_1929776_compli_0.CPMUtil</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description/>
+        <mobile_callable>false</mobile_callable>
+        <name>CPMUtil</name>
+        <sandbox_callable>false</sandbox_callable>
+        <script><![CDATA[// Role: shared helpers (settings, dates, traffic light, owner lookup). Every other Script Include uses this one.
+var CPMUtil = Class.create();
+CPMUtil.prototype = {
+  initialize: function() {},
+
+  // Role: reads an application setting (system property) with a default value.
+  prop: function(name, fallback) {
+    return gs.getProperty('x_1929776_compli_0.' + name, fallback);
+  },
+
+  // Role: same as prop(), but returns a number.
+  intProp: function(name, fallback) {
+    var value = parseInt(this.prop(name, ''), 10);
+    return isNaN(value) ? fallback : value;
+  },
+
+  // Role: today's date as YYYY-MM-DD in the instance time zone.
+  today: function() {
+    return new GlideDateTime().getLocalDate().getValue();
+  },
+
+  // Role: adds (or subtracts) days to a YYYY-MM-DD date.
+  addDays: function(date, days) {
+    var gdt = new GlideDateTime(date + ' 00:00:00');
+    gdt.addDaysUTC(days);
+    return gdt.getDate().getValue();
+  },
+
+  // Role: number of days between two YYYY-MM-DD dates.
+  daysBetween: function(from, to) {
+    var start = new GlideDateTime(from + ' 00:00:00').getNumericValue();
+    var end = new GlideDateTime(to + ' 00:00:00').getNumericValue();
+    return Math.round((end - start) / 86400000);
+  },
+
+  // Role: the last day on which approved evidence counts as "expiring soon".
+  horizon: function() {
+    return this.addDays(this.today(), this.intProp('warning_days', 30));
+  },
+
+  // Role: turns a coverage percentage into a traffic light, using the two thresholds of the settings.
+  riskFor: function(total, coverage) {
+    if (!total) return 'not_assessed';
+    if (coverage >= this.intProp('green_min', 80)) return 'green';
+    return coverage >= this.intProp('yellow_min', 50) ? 'yellow' : 'red';
+  },
+
+  // Role: finds who is accountable for a CI: its owner, else its manager, else the fallback user.
+  ownerOf: function(ci) {
+    return ci.getValue('owned_by') || ci.getValue('managed_by') || this.prop('fallback_owner', '');
+  },
+
+  type: 'CPMUtil'
+};]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-10-21 22:48:43</sys_created_on>
+        <sys_id>0641b5467300d310a621f2024ab8b746</sys_id>
+        <sys_mod_count>15</sys_mod_count>
+        <sys_name>CPMUtil</sys_name>
+        <sys_package display_value="Compliance Posture Mapper" source="x_1929776_compli_0">f7756d0a738c9310a621f2024ab8b707</sys_package>
+        <sys_policy>read</sys_policy>
+        <sys_scope display_value="Compliance Posture Mapper">f7756d0a738c9310a621f2024ab8b707</sys_scope>
+        <sys_update_name>sys_script_include_0641b5467300d310a621f2024ab8b746</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-10-27 16:47:40</sys_updated_on>
+    </sys_script_include>
+</record_update>

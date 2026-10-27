@@ -1,0 +1,258 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="DELETE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_1929776_compli_0.CPMEvidence</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description/>
+        <mobile_callable>false</mobile_callable>
+        <name>CPMEvidence</name>
+        <sandbox_callable>false</sandbox_callable>
+        <script><![CDATA[var CPMEvidence = Class.create();
+CPMEvidence.prototype = {
+  ALLOWED: { 'image/png': 1, 'image/jpeg': 1, 'image/gif': 1, 'image/webp': 1, 'application/pdf': 1 },
+  BATCH_MINUTES: 15,
+
+  initialize: function() {
+    this.util = new CPMUtil();
+    this.access = new CPMAccess();
+  },
+
+  // Called by the REST resource. Returns { status, body }.
+  receive: function(serviceControlId, evidenceId, file, stream) {
+    var sc = new GlideRecord('x_1929776_compli_0_service_control');
+    if (!sc.get(serviceControlId) || !this.access.canWorkOn(sc))
+      return this._fail(403, 'You cannot add evidence to this control.');
+    if ((sc.control.method + '') != 'upload' || sc.getValue('active') != '1' || sc.getValue('exempt') == '1')
+      return this._fail(400, 'This control does not accept evidence.');
+
+    var problem = this._validate(file);
+    if (problem) return this._fail(400, problem);
+
+    var evidence = evidenceId ? this._openBatch(sc, evidenceId) : null;
+    var isNew = !evidence;
+    if (isNew) evidence = this._create(sc);
+
+    var attachmentId = new GlideSysAttachment().writeContentStream(evidence, file.name, file.type, stream);
+    if (!attachmentId) {
+      if (isNew) evidence.deleteRecord();
+      return this._fail(500, 'The file could not be saved.');
+    }
+    if (isNew) this._publish(sc, evidence);
+
+    return { status: 200, body: { evidence: evidence.getUniqueValue(), number: evidence.getValue('number') } };
+  },
+
+  _validate: function(file) {
+    var maxMb = this.util.intProp('max_file_mb', 10);
+    if (!file.name) return 'The file name is missing.';
+    if (!this.ALLOWED[file.type]) return 'Only images (PNG, JPG, GIF, WEBP) and PDF files are accepted.';
+    if (!/\.(png|jpe?g|gif|webp|pdf)$/i.test(file.name)) return 'This file extension is not allowed.';
+    if (!file.size) return 'The file is empty.';
+    if (file.size > maxMb * 1024 * 1024) return 'The file is larger than ' + maxMb + ' MB.';
+    return '';
+  },
+
+  // Several files dropped together share one Evidence record
+  _openBatch: function(sc, evidenceId) {
+    var evidence = new GlideRecord('x_1929776_compli_0_evidence');
+    if (!evidence.get(evidenceId)) return null;
+    if (evidence.getValue('service_control') != sc.getUniqueValue()) return null;
+    if (evidence.getValue('uploaded_by') != gs.getUserID()) return null;
+    if (evidence.getValue('status') != 'current') return null;
+    var ageMs = GlideDateTime.subtract(new GlideDateTime(evidence.getValue('sys_created_on')), new GlideDateTime()).getNumericValue();
+    return ageMs <= this.BATCH_MINUTES * 60000 ? evidence : null;
+  },
+
+  _create: function(sc) {
+    var days = parseInt(sc.control.validity_days + '', 10) || 365;
+    var evidence = new GlideRecord('x_1929776_compli_0_evidence');
+    evidence.initialize();
+    evidence.setValue('service_control', sc.getUniqueValue());
+    evidence.setValue('collected_on', this.util.today());
+    evidence.setValue('valid_until', this.util.addDays(this.util.today(), days));
+    evidence.setValue('status', 'current');
+    evidence.setValue('uploaded_by', gs.getUserID());
+    evidence.insert();
+    return evidence;
+  },
+
+  _publish: function(sc, evidence) {
+    var older = new GlideRecord('x_1929776_compli_0_evidence');
+    older.addQuery('service_control', sc.getUniqueValue());
+    older.addQuery('status', 'current');
+    older.addQuery('sys_id', '!=', evidence.getUniqueValue());
+    older.query();
+    while (older.next()) {
+      older.setValue('status', 'superseded');
+      older.update();
+    }
+
+    sc.setValue('evidence', evidence.getUniqueValue());
+    sc.setValue('valid_until', evidence.getValue('valid_until'));
+    sc.setValue('state', this.util.stateFor(evidence.getValue('valid_until')));
+    sc.setValue('notified_state', '');
+    sc.update();
+    new CPMPosture().recalculate(sc.getValue('business_service'));
+  },
+
+  _fail: function(status, message) {
+    return { status: status, body: { error: message } };
+  },
+
+  type: 'CPMEvidence'
+};]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-10-24 11:50:04</sys_created_on>
+        <sys_id>ffc77e7e73001310a621f2024ab8b7ff</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>CPMEvidence</sys_name>
+        <sys_package display_value="Compliance Posture Mapper" source="x_1929776_compli_0">f7756d0a738c9310a621f2024ab8b707</sys_package>
+        <sys_policy>read</sys_policy>
+        <sys_scope display_value="Compliance Posture Mapper">f7756d0a738c9310a621f2024ab8b707</sys_scope>
+        <sys_update_name>sys_script_include_ffc77e7e73001310a621f2024ab8b7ff</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-10-24 11:50:04</sys_updated_on>
+    </sys_script_include>
+    <sys_update_version action="INSERT_OR_UPDATE">
+        <action>DELETE</action>
+        <application display_value="Compliance Posture Mapper">f7756d0a738c9310a621f2024ab8b707</application>
+        <file_path/>
+        <instance_id>d0c76825ebca8b98e9bbfddacad0cd41</instance_id>
+        <instance_name>dev433816</instance_name>
+        <merge_base/>
+        <name>sys_script_include_ffc77e7e73001310a621f2024ab8b7ff</name>
+        <payload>&lt;?xml version="1.0" encoding="UTF-8"?&gt;&lt;record_update table="sys_script_include"&gt;&lt;sys_script_include action="INSERT_OR_UPDATE"&gt;&lt;access&gt;package_private&lt;/access&gt;&lt;active&gt;true&lt;/active&gt;&lt;api_name&gt;x_1929776_compli_0.CPMEvidence&lt;/api_name&gt;&lt;caller_access/&gt;&lt;client_callable&gt;false&lt;/client_callable&gt;&lt;description/&gt;&lt;mobile_callable&gt;false&lt;/mobile_callable&gt;&lt;name&gt;CPMEvidence&lt;/name&gt;&lt;sandbox_callable&gt;false&lt;/sandbox_callable&gt;&lt;script&gt;&lt;![CDATA[var CPMEvidence = Class.create();
+CPMEvidence.prototype = {
+  ALLOWED: { 'image/png': 1, 'image/jpeg': 1, 'image/gif': 1, 'image/webp': 1, 'application/pdf': 1 },
+  BATCH_MINUTES: 15,
+
+  initialize: function() {
+    this.util = new CPMUtil();
+    this.access = new CPMAccess();
+  },
+
+  // Called by the REST resource. Returns { status, body }.
+  receive: function(serviceControlId, evidenceId, file, stream) {
+    var sc = new GlideRecord('x_1929776_compli_0_service_control');
+    if (!sc.get(serviceControlId) || !this.access.canWorkOn(sc))
+      return this._fail(403, 'You cannot add evidence to this control.');
+    if ((sc.control.method + '') != 'upload' || sc.getValue('active') != '1' || sc.getValue('exempt') == '1')
+      return this._fail(400, 'This control does not accept evidence.');
+
+    var problem = this._validate(file);
+    if (problem) return this._fail(400, problem);
+
+    var evidence = evidenceId ? this._openBatch(sc, evidenceId) : null;
+    var isNew = !evidence;
+    if (isNew) evidence = this._create(sc);
+
+    var attachmentId = new GlideSysAttachment().writeContentStream(evidence, file.name, file.type, stream);
+    if (!attachmentId) {
+      if (isNew) evidence.deleteRecord();
+      return this._fail(500, 'The file could not be saved.');
+    }
+    if (isNew) this._publish(sc, evidence);
+
+    return { status: 200, body: { evidence: evidence.getUniqueValue(), number: evidence.getValue('number') } };
+  },
+
+  _validate: function(file) {
+    var maxMb = this.util.intProp('max_file_mb', 10);
+    if (!file.name) return 'The file name is missing.';
+    if (!this.ALLOWED[file.type]) return 'Only images (PNG, JPG, GIF, WEBP) and PDF files are accepted.';
+    if (!/\.(png|jpe?g|gif|webp|pdf)$/i.test(file.name)) return 'This file extension is not allowed.';
+    if (!file.size) return 'The file is empty.';
+    if (file.size &gt; maxMb * 1024 * 1024) return 'The file is larger than ' + maxMb + ' MB.';
+    return '';
+  },
+
+  // Several files dropped together share one Evidence record
+  _openBatch: function(sc, evidenceId) {
+    var evidence = new GlideRecord('x_1929776_compli_0_evidence');
+    if (!evidence.get(evidenceId)) return null;
+    if (evidence.getValue('service_control') != sc.getUniqueValue()) return null;
+    if (evidence.getValue('uploaded_by') != gs.getUserID()) return null;
+    if (evidence.getValue('status') != 'current') return null;
+    var ageMs = GlideDateTime.subtract(new GlideDateTime(evidence.getValue('sys_created_on')), new GlideDateTime()).getNumericValue();
+    return ageMs &lt;= this.BATCH_MINUTES * 60000 ? evidence : null;
+  },
+
+  _create: function(sc) {
+    var days = parseInt(sc.control.validity_days + '', 10) || 365;
+    var evidence = new GlideRecord('x_1929776_compli_0_evidence');
+    evidence.initialize();
+    evidence.setValue('service_control', sc.getUniqueValue());
+    evidence.setValue('collected_on', this.util.today());
+    evidence.setValue('valid_until', this.util.addDays(this.util.today(), days));
+    evidence.setValue('status', 'current');
+    evidence.setValue('uploaded_by', gs.getUserID());
+    evidence.insert();
+    return evidence;
+  },
+
+  _publish: function(sc, evidence) {
+    var older = new GlideRecord('x_1929776_compli_0_evidence');
+    older.addQuery('service_control', sc.getUniqueValue());
+    older.addQuery('status', 'current');
+    older.addQuery('sys_id', '!=', evidence.getUniqueValue());
+    older.query();
+    while (older.next()) {
+      older.setValue('status', 'superseded');
+      older.update();
+    }
+
+    sc.setValue('evidence', evidence.getUniqueValue());
+    sc.setValue('valid_until', evidence.getValue('valid_until'));
+    sc.setValue('state', this.util.stateFor(evidence.getValue('valid_until')));
+    sc.setValue('notified_state', '');
+    sc.update();
+    new CPMPosture().recalculate(sc.getValue('business_service'));
+  },
+
+  _fail: function(status, message) {
+    return { status: status, body: { error: message } };
+  },
+
+  type: 'CPMEvidence'
+};]]&gt;&lt;/script&gt;&lt;sys_class_name&gt;sys_script_include&lt;/sys_class_name&gt;&lt;sys_created_by&gt;admin&lt;/sys_created_by&gt;&lt;sys_created_on&gt;2026-10-24 11:50:04&lt;/sys_created_on&gt;&lt;sys_id&gt;ffc77e7e73001310a621f2024ab8b7ff&lt;/sys_id&gt;&lt;sys_mod_count&gt;0&lt;/sys_mod_count&gt;&lt;sys_name&gt;CPMEvidence&lt;/sys_name&gt;&lt;sys_package display_value="Compliance Posture Mapper" source="x_1929776_compli_0"&gt;f7756d0a738c9310a621f2024ab8b707&lt;/sys_package&gt;&lt;sys_policy&gt;read&lt;/sys_policy&gt;&lt;sys_scope display_value="Compliance Posture Mapper"&gt;f7756d0a738c9310a621f2024ab8b707&lt;/sys_scope&gt;&lt;sys_update_name&gt;sys_script_include_ffc77e7e73001310a621f2024ab8b7ff&lt;/sys_update_name&gt;&lt;sys_updated_by&gt;admin&lt;/sys_updated_by&gt;&lt;sys_updated_on&gt;2026-10-24 11:50:04&lt;/sys_updated_on&gt;&lt;/sys_script_include&gt;&lt;/record_update&gt;</payload>
+        <payload_hash>2001596479</payload_hash>
+        <record_name>CPMEvidence</record_name>
+        <reverted_from/>
+        <source>c8856d0a738c9310a621f2024ab8b710</source>
+        <source_table>sys_update_set</source_table>
+        <state>previous</state>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-10-24 11:50:04</sys_created_on>
+        <sys_id>abd736be73001310a621f2024ab8b718</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_recorded_at>1a16dbf1e950000001</sys_recorded_at>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-10-24 11:50:04</sys_updated_on>
+        <type>Script Include</type>
+        <update_guid>6bd736be05001310da2ee0e0a19a5217</update_guid>
+        <update_guid_history>6bd736be05001310da2ee0e0a19a5217:2001596479</update_guid_history>
+    </sys_update_version>
+    <sys_metadata_delete action="INSERT_OR_UPDATE">
+        <sys_audit_delete/>
+        <sys_class_name>sys_metadata_delete</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-10-25 13:48:00</sys_created_on>
+        <sys_db_object display_value="" name="sys_script_include">sys_script_include</sys_db_object>
+        <sys_id>1a6d7ea3a4db46a084acf8d01a2d6624</sys_id>
+        <sys_metadata>ffc77e7e73001310a621f2024ab8b7ff</sys_metadata>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>CPMEvidence</sys_name>
+        <sys_package display_value="Compliance Posture Mapper" source="x_1929776_compli_0">f7756d0a738c9310a621f2024ab8b707</sys_package>
+        <sys_parent/>
+        <sys_policy>read</sys_policy>
+        <sys_scope display_value="Compliance Posture Mapper">f7756d0a738c9310a621f2024ab8b707</sys_scope>
+        <sys_scope_delete display_value="">01361efd492541088029ed23d04a1640</sys_scope_delete>
+        <sys_update_name>sys_script_include_ffc77e7e73001310a621f2024ab8b7ff</sys_update_name>
+        <sys_update_version display_value="sys_script_include_ffc77e7e73001310a621f2024ab8b7ff">abd736be73001310a621f2024ab8b718</sys_update_version>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-10-25 13:48:00</sys_updated_on>
+    </sys_metadata_delete>
+</record_update>

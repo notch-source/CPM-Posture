@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update>
+    <sys_dictionary action="DELETE" element="control" table="x_1929776_compli_0_service_control">
+        <active>true</active>
+        <array>false</array>
+        <attributes/>
+        <audit>false</audit>
+        <calculation/>
+        <choice>0</choice>
+        <choice_field/>
+        <choice_table/>
+        <column_label>Control</column_label>
+        <comments/>
+        <create_roles/>
+        <default_value/>
+        <defaultsort/>
+        <delete_roles/>
+        <dependent/>
+        <dependent_on_field/>
+        <display>false</display>
+        <dynamic_creation>false</dynamic_creation>
+        <dynamic_creation_script/>
+        <dynamic_default_value/>
+        <dynamic_ref_qual/>
+        <element>control</element>
+        <element_reference>false</element_reference>
+        <foreign_database/>
+        <formula/>
+        <function_definition/>
+        <function_field>false</function_field>
+        <internal_type display_value="Reference">reference</internal_type>
+        <mandatory>true</mandatory>
+        <max_length>32</max_length>
+        <name>x_1929776_compli_0_service_control</name>
+        <next_element/>
+        <primary>false</primary>
+        <read_only>false</read_only>
+        <read_only_option/>
+        <read_roles/>
+        <reference display_value="" name="x_1929776_compli_0_control">x_1929776_compli_0_control</reference>
+        <reference_cascade_rule/>
+        <reference_floats>false</reference_floats>
+        <reference_key/>
+        <reference_qual/>
+        <reference_qual_condition/>
+        <reference_type/>
+        <spell_check>false</spell_check>
+        <staged>false</staged>
+        <sys_class_name>sys_dictionary</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-10-22 23:33:42</sys_created_on>
+        <sys_id>c7b5839a73485710a621f2024ab8b74b</sys_id>
+        <sys_name>Control</sys_name>
+        <sys_package display_value="Compliance Posture Mapper" source="x_1929776_compli_0">f7756d0a738c9310a621f2024ab8b707</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Compliance Posture Mapper">f7756d0a738c9310a621f2024ab8b707</sys_scope>
+        <sys_update_name>sys_dictionary_x_1929776_compli_0_service_control_control</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-10-22 23:34:59</sys_updated_on>
+        <table_reference>false</table_reference>
+        <text_index>false</text_index>
+        <unique>false</unique>
+        <use_dependent_field>false</use_dependent_field>
+        <use_dynamic_default>false</use_dynamic_default>
+        <use_reference_qualifier>simple</use_reference_qualifier>
+        <virtual>false</virtual>
+        <virtual_type>script</virtual_type>
+        <widget/>
+        <write_roles/>
+        <xml_view>false</xml_view>
+    </sys_dictionary>
+    <sys_update_version action="INSERT_OR_UPDATE">
+        <action>DELETE</action>
+        <application display_value="Compliance Posture Mapper">f7756d0a738c9310a621f2024ab8b707</application>
+        <file_path/>
+        <instance_id>d0c76825ebca8b98e9bbfddacad0cd41</instance_id>
+        <instance_name>dev433816</instance_name>
+        <merge_base/>
+        <name>sys_dictionary_x_1929776_compli_0_service_control_control</name>
+        <payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update><sys_dictionary action="INSERT_OR_UPDATE" element="control" table="x_1929776_compli_0_service_control"><active>true</active><array>false</array><attributes/><audit>false</audit><calculation/><choice>0</choice><choice_field/><choice_table/><column_label>Control</column_label><comments/><create_roles/><default_value/><defaultsort/><delete_roles/><dependent/><dependent_on_field/><display>false</display><dynamic_creation>false</dynamic_creation><dynamic_creation_script/><dynamic_default_value/><dynamic_ref_qual/><element>control</element><element_reference>false</element_reference><foreign_database/><formula/><function_definition/><function_field>false</function_field><internal_type display_value="Reference">reference</internal_type><mandatory>true</mandatory><max_length>32</max_length><name>x_1929776_compli_0_service_control</name><next_element/><primary>false</primary><read_only>false</read_only><read_only_option/><read_roles/><reference display_value="" name="x_1929776_compli_0_control">x_1929776_compli_0_control</reference><reference_cascade_rule/><reference_floats>false</reference_floats><reference_key/><reference_qual/><reference_qual_condition/><reference_type/><spell_check>false</spell_check><staged>false</staged><sys_class_name>sys_dictionary</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-10-22 23:33:42</sys_created_on><sys_id>c7b5839a73485710a621f2024ab8b74b</sys_id><sys_name>Control</sys_name><sys_package display_value="Compliance Posture Mapper" source="x_1929776_compli_0">f7756d0a738c9310a621f2024ab8b707</sys_package><sys_policy/><sys_scope display_value="Compliance Posture Mapper">f7756d0a738c9310a621f2024ab8b707</sys_scope><sys_update_name>sys_dictionary_x_1929776_compli_0_service_control_control</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-10-22 23:34:59</sys_updated_on><table_reference>false</table_reference><text_index>false</text_index><unique>false</unique><use_dependent_field>false</use_dependent_field><use_dynamic_default>false</use_dynamic_default><use_reference_qualifier>simple</use_reference_qualifier><virtual>false</virtual><virtual_type>script</virtual_type><widget/><write_roles/><xml_view>false</xml_view></sys_dictionary></record_update>]]></payload>
+        <payload_hash>270111482</payload_hash>
+        <record_name>Service Control.Control</record_name>
+        <reverted_from/>
+        <source>c8856d0a738c9310a621f2024ab8b710</source>
+        <source_table>sys_update_set</source_table>
+        <state>previous</state>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-10-22 23:35:01</sys_created_on>
+        <sys_id>6e0603da73485710a621f2024ab8b764</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_recorded_at>1a165f7cdd20000001</sys_recorded_at>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-10-22 23:35:01</sys_updated_on>
+        <type>Dictionary</type>
+        <update_guid>1e0603da9a48571009bfc2fdee159c63</update_guid>
+        <update_guid_history>1e0603da9a48571009bfc2fdee159c63:270111482,2ac5079a9b485710a2bd188482c8b6bd:1037155980</update_guid_history>
+    </sys_update_version>
+    <sys_metadata_delete action="INSERT_OR_UPDATE">
+        <sys_audit_delete/>
+        <sys_class_name>sys_metadata_delete</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-10-25 13:54:19</sys_created_on>
+        <sys_db_object display_value="" name="sys_dictionary">sys_dictionary</sys_db_object>
+        <sys_id>7014581bf6d04e36806f5946964da404</sys_id>
+        <sys_metadata>c7b5839a73485710a621f2024ab8b74b</sys_metadata>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>Control</sys_name>
+        <sys_package display_value="Compliance Posture Mapper" source="x_1929776_compli_0">f7756d0a738c9310a621f2024ab8b707</sys_package>
+        <sys_parent display_value="">5773031673485710a621f2024ab8b7c5</sys_parent>
+        <sys_policy/>
+        <sys_scope display_value="Compliance Posture Mapper">f7756d0a738c9310a621f2024ab8b707</sys_scope>
+        <sys_scope_delete display_value="">01361efd492541088029ed23d04a1640</sys_scope_delete>
+        <sys_update_name>sys_dictionary_x_1929776_compli_0_service_control_control</sys_update_name>
+        <sys_update_version display_value="sys_dictionary_x_1929776_compli_0_service_control_control">6e0603da73485710a621f2024ab8b764</sys_update_version>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-10-25 13:54:19</sys_updated_on>
+    </sys_metadata_delete>
+</record_update>

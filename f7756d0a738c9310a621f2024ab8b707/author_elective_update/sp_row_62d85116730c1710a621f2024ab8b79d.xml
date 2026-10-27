@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sp_row">
+    <sp_row action="DELETE">
+        <aria_label/>
+        <class_name/>
+        <order>1</order>
+        <semantic_tag/>
+        <sp_column/>
+        <sp_container display_value="CPM service - Container 2">b6c89196730c1710a621f2024ab8b78a</sp_container>
+        <sys_class_name>sp_row</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-10-22 15:37:58</sys_created_on>
+        <sys_id>62d85116730c1710a621f2024ab8b79d</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>1</sys_name>
+        <sys_package display_value="Compliance Posture Mapper" source="x_1929776_compli_0">f7756d0a738c9310a621f2024ab8b707</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Compliance Posture Mapper">f7756d0a738c9310a621f2024ab8b707</sys_scope>
+        <sys_update_name>sp_row_62d85116730c1710a621f2024ab8b79d</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-10-22 15:37:58</sys_updated_on>
+    </sp_row>
+    <sys_update_version action="INSERT_OR_UPDATE">
+        <action>DELETE</action>
+        <application display_value="Compliance Posture Mapper">f7756d0a738c9310a621f2024ab8b707</application>
+        <file_path/>
+        <instance_id>d0c76825ebca8b98e9bbfddacad0cd41</instance_id>
+        <instance_name>dev433816</instance_name>
+        <merge_base/>
+        <name>sp_row_62d85116730c1710a621f2024ab8b79d</name>
+        <payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update table="sp_row"><sp_row action="INSERT_OR_UPDATE"><aria_label/><class_name/><order>1</order><semantic_tag/><sp_column/><sp_container display_value="CPM service - Container 2">b6c89196730c1710a621f2024ab8b78a</sp_container><sys_class_name>sp_row</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-10-22 15:37:58</sys_created_on><sys_id>62d85116730c1710a621f2024ab8b79d</sys_id><sys_mod_count>0</sys_mod_count><sys_name>1</sys_name><sys_package display_value="Compliance Posture Mapper" source="x_1929776_compli_0">f7756d0a738c9310a621f2024ab8b707</sys_package><sys_policy/><sys_scope display_value="Compliance Posture Mapper">f7756d0a738c9310a621f2024ab8b707</sys_scope><sys_update_name>sp_row_62d85116730c1710a621f2024ab8b79d</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-10-22 15:37:58</sys_updated_on></sp_row></record_update>]]></payload>
+        <payload_hash>586819258</payload_hash>
+        <record_name>1</record_name>
+        <reverted_from/>
+        <source>c8856d0a738c9310a621f2024ab8b710</source>
+        <source_table>sys_update_set</source_table>
+        <state>previous</state>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-10-22 15:37:59</sys_created_on>
+        <sys_id>a2d81d5a730c1710a621f2024ab8b762</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_recorded_at>1a1644311380000001</sys_recorded_at>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-10-22 15:37:59</sys_updated_on>
+        <type>Row</type>
+        <update_guid>6ed85116910c1710eeea02613a01699f</update_guid>
+        <update_guid_history>6ed85116910c1710eeea02613a01699f:586819258</update_guid_history>
+    </sys_update_version>
+    <sys_metadata_delete action="INSERT_OR_UPDATE">
+        <sys_audit_delete display_value="1">2a2a07f273c01310a621f2024ab8b7b3</sys_audit_delete>
+        <sys_class_name>sys_metadata_delete</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-10-24 13:10:01</sys_created_on>
+        <sys_db_object display_value="" name="sp_row">sp_row</sys_db_object>
+        <sys_id>06e1301c8d9f4bcea7a32212757ff624</sys_id>
+        <sys_metadata>62d85116730c1710a621f2024ab8b79d</sys_metadata>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>1</sys_name>
+        <sys_package display_value="Compliance Posture Mapper" source="x_1929776_compli_0">f7756d0a738c9310a621f2024ab8b707</sys_package>
+        <sys_parent/>
+        <sys_policy/>
+        <sys_scope display_value="Compliance Posture Mapper">f7756d0a738c9310a621f2024ab8b707</sys_scope>
+        <sys_scope_delete display_value="">01361efd492541088029ed23d04a1640</sys_scope_delete>
+        <sys_update_name>sp_row_62d85116730c1710a621f2024ab8b79d</sys_update_name>
+        <sys_update_version display_value="sp_row_62d85116730c1710a621f2024ab8b79d">a2d81d5a730c1710a621f2024ab8b762</sys_update_version>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-10-24 13:10:01</sys_updated_on>
+    </sys_metadata_delete>
+</record_update>

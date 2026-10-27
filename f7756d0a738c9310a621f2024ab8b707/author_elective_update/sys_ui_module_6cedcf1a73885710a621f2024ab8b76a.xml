@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update sys_domain="global" table="sys_ui_module">
+    <sys_ui_module action="DELETE">
+        <active>true</active>
+        <application/>
+        <filter/>
+        <name>Settings</name>
+        <order/>
+        <path>/sys_properties_list.do?sysparm_query=nameSTARTSWITHx_1929776_compli_0.</path>
+        <path_relative_to_root>false</path_relative_to_root>
+        <roles/>
+        <sys_class_name>sys_ui_module</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-10-23 00:10:53</sys_created_on>
+        <sys_domain>global</sys_domain>
+        <sys_domain_path>/</sys_domain_path>
+        <sys_id>6cedcf1a73885710a621f2024ab8b76a</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>Settings</sys_name>
+        <sys_package display_value="Compliance Posture Mapper" source="x_1929776_compli_0">f7756d0a738c9310a621f2024ab8b707</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Compliance Posture Mapper">f7756d0a738c9310a621f2024ab8b707</sys_scope>
+        <sys_update_name>sys_ui_module_6cedcf1a73885710a621f2024ab8b76a</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-10-23 00:10:53</sys_updated_on>
+        <table/>
+        <uncancelable>false</uncancelable>
+        <view_name/>
+    </sys_ui_module>
+    <sys_update_version action="INSERT_OR_UPDATE">
+        <action>DELETE</action>
+        <application display_value="Compliance Posture Mapper">f7756d0a738c9310a621f2024ab8b707</application>
+        <file_path/>
+        <instance_id>d0c76825ebca8b98e9bbfddacad0cd41</instance_id>
+        <instance_name>dev433816</instance_name>
+        <merge_base/>
+        <name>sys_ui_module_6cedcf1a73885710a621f2024ab8b76a</name>
+        <payload><![CDATA[<?xml version="1.0" encoding="UTF-8"?><record_update sys_domain="global" table="sys_ui_module"><sys_ui_module action="INSERT_OR_UPDATE"><active>true</active><application/><filter/><name>Settings</name><order/><path>/sys_properties_list.do?sysparm_query=nameSTARTSWITHx_1929776_compli_0.</path><path_relative_to_root>false</path_relative_to_root><roles/><sys_class_name>sys_ui_module</sys_class_name><sys_created_by>admin</sys_created_by><sys_created_on>2026-10-23 00:10:53</sys_created_on><sys_domain>global</sys_domain><sys_domain_path>/</sys_domain_path><sys_id>6cedcf1a73885710a621f2024ab8b76a</sys_id><sys_mod_count>0</sys_mod_count><sys_name>Settings</sys_name><sys_package display_value="Compliance Posture Mapper" source="x_1929776_compli_0">f7756d0a738c9310a621f2024ab8b707</sys_package><sys_policy/><sys_scope display_value="Compliance Posture Mapper">f7756d0a738c9310a621f2024ab8b707</sys_scope><sys_update_name>sys_ui_module_6cedcf1a73885710a621f2024ab8b76a</sys_update_name><sys_updated_by>admin</sys_updated_by><sys_updated_on>2026-10-23 00:10:53</sys_updated_on><table/><uncancelable>false</uncancelable><view_name/></sys_ui_module></record_update>]]></payload>
+        <payload_hash>1878092503</payload_hash>
+        <record_name>Settings</record_name>
+        <reverted_from/>
+        <source>c8856d0a738c9310a621f2024ab8b710</source>
+        <source_table>sys_update_set</source_table>
+        <state>previous</state>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-10-23 01:02:06</sys_created_on>
+        <sys_id>06f91fd2730c5710a621f2024ab8b770</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_recorded_at>1a1664788700000001</sys_recorded_at>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-10-23 01:02:06</sys_updated_on>
+        <type>Module</type>
+        <update_guid>484e0fdaff8857106a678ef2f2fdf174</update_guid>
+        <update_guid_history>484e0fdaff8857106a678ef2f2fdf174:-1524969877,484e0fdaff8857106a678ef2f2fdf174:-1524969877</update_guid_history>
+    </sys_update_version>
+    <sys_metadata_delete action="INSERT_OR_UPDATE">
+        <sys_audit_delete/>
+        <sys_class_name>sys_metadata_delete</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-10-23 01:05:40</sys_created_on>
+        <sys_db_object display_value="" name="sys_ui_module">sys_ui_module</sys_db_object>
+        <sys_id>138936d46f0e43ff8c0b9e07483529e1</sys_id>
+        <sys_metadata>6cedcf1a73885710a621f2024ab8b76a</sys_metadata>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>Settings</sys_name>
+        <sys_package display_value="Compliance Posture Mapper" source="x_1929776_compli_0">f7756d0a738c9310a621f2024ab8b707</sys_package>
+        <sys_parent/>
+        <sys_policy/>
+        <sys_scope display_value="Compliance Posture Mapper">f7756d0a738c9310a621f2024ab8b707</sys_scope>
+        <sys_scope_delete display_value="">01361efd492541088029ed23d04a1640</sys_scope_delete>
+        <sys_update_name>sys_ui_module_6cedcf1a73885710a621f2024ab8b76a</sys_update_name>
+        <sys_update_version display_value="sys_ui_module_6cedcf1a73885710a621f2024ab8b76a">06f91fd2730c5710a621f2024ab8b770</sys_update_version>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-10-23 01:05:40</sys_updated_on>
+    </sys_metadata_delete>
+</record_update>

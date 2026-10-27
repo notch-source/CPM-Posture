@@ -1,0 +1,510 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sp_widget">
+    <sp_widget action="DELETE">
+        <category>custom</category>
+        <client_script><![CDATA[api.controller = function() {
+  var c = this;
+  c.filter = 'all';
+  c.q = '';
+  c.setFilter = function(f) { c.filter = f; };
+  c.match = function(r) {
+    if (c.filter !== 'all' && r.level !== c.filter) return false;
+    return !c.q || r.service.toLowerCase().indexOf(c.q.toLowerCase()) > -1;
+  };
+  c.count = function(f) {
+    return c.data.rows.filter(function(r) { return f === 'all' || r.level === f; }).length;
+  };
+};]]></client_script>
+        <controller_as>c</controller_as>
+        <css>.cpm { color: #1f2937; }
+.cpm * { box-sizing: border-box; }
+
+.cpm-hero { display: flex; justify-content: space-between; align-items: center;
+  padding: 24px 28px; border-radius: 16px; color: #fff; margin-bottom: 18px;
+  background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 60%, #0e7490 100%); }
+.cpm-hero h2 { margin: 4px 0; font-size: 26px; color: #fff; }
+.cpm-hero p { margin: 0; opacity: .8; }
+.cpm-eyebrow { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; opacity: .7; }
+.cpm-hero-ring { position: relative; width: 92px; height: 92px; flex: none; }
+.cpm-hero-ring svg { width: 100%; height: 100%; }
+.cpm-hero-ring-label { position: absolute; top: 0; left: 0; right: 0; bottom: 0; display: flex;
+  flex-direction: column; align-items: center; justify-content: center; }
+.cpm-hero-ring-label b { font-size: 21px; line-height: 1; }
+.cpm-hero-ring-label span { font-size: 10px; opacity: .7; }
+.cpm-hero .track { fill: none; stroke: rgba(255,255,255,.2); stroke-width: 7; }
+.cpm-hero .bar { fill: none; stroke: #5eead4; stroke-width: 7; stroke-linecap: round; }
+
+.cpm-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; margin-bottom: 20px; }
+.cpm-kpi { background: #fff; border-radius: 12px; padding: 14px 16px; border: 1px solid #e5e7eb; border-left: 4px solid #3b82f6; }
+.cpm-kpi b { display: block; font-size: 26px; line-height: 1.1; }
+.cpm-kpi span { font-size: 12px; color: #6b7280; }
+.cpm-kpi.warn { border-left-color: #f59e0b; }
+.cpm-kpi.danger { border-left-color: #ef4444; }
+
+.cpm-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.cpm-chips button { border: 1px solid #d1d5db; background: #fff; border-radius: 999px;
+  padding: 6px 14px; margin-right: 6px; font-size: 13px; cursor: pointer; }
+.cpm-chips button.active { background: #1e3a8a; color: #fff; border-color: #1e3a8a; }
+.cpm-search { border: 1px solid #d1d5db; border-radius: 10px; padding: 8px 12px; min-width: 220px; }
+
+.cpm-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 16px; margin-bottom: 22px; }
+.cpm-card { display: block; background: #fff; border-radius: 16px; padding: 18px; color: inherit;
+  border: 1px solid #e5e7eb; transition: transform .15s, box-shadow .15s; }
+.cpm-card:hover { transform: translateY(-3px); box-shadow: 0 10px 24px rgba(15,23,42,.12); text-decoration: none; color: inherit; }
+.cpm-card-head { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
+.cpm-card-title { font-weight: 600; font-size: 16px; margin-bottom: 4px; }
+.cpm-ring { width: 64px; height: 64px; flex: none; }
+.cpm-ring .track { fill: none; stroke: #e5e7eb; stroke-width: 7; }
+.cpm-ring .bar { fill: none; stroke-width: 7; stroke-linecap: round; }
+.cpm-ring text { font-size: 15px; font-weight: 700; fill: #111827; }
+.level-ok .bar { stroke: #16a34a; }    .level-ok .cpm-badge { background: #dcfce7; color: #166534; }
+.level-warn .bar { stroke: #f59e0b; }  .level-warn .cpm-badge { background: #fef3c7; color: #92400e; }
+.level-danger .bar { stroke: #ef4444; } .level-danger .cpm-badge { background: #fee2e2; color: #991b1b; }
+.cpm-badge { font-size: 11px; padding: 2px 10px; border-radius: 999px; font-weight: 600; }
+.cpm-card-stats { display: grid; grid-template-columns: repeat(4, 1fr); text-align: center; border-top: 1px solid #f3f4f6; padding-top: 12px; }
+.cpm-card-stats b { display: block; font-size: 18px; }
+.cpm-card-stats span { font-size: 11px; color: #6b7280; }
+.cpm-empty { grid-column: 1 / -1; text-align: center; color: #6b7280; padding: 30px; }
+
+.cpm-panels { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
+.cpm-panel { background: #fff; border-radius: 16px; padding: 16px 20px; border: 1px solid #e5e7eb; }
+.cpm-panel h4 { margin: 0 0 10px; font-size: 15px; }
+.cpm-row { display: flex; justify-content: space-between; gap: 10px; padding: 9px 0; border-top: 1px solid #f3f4f6; font-size: 14px; }
+.cpm-row small { display: block; color: #6b7280; }
+.cpm-row em { font-style: normal; font-size: 12px; color: #b45309; background: #fef3c7; padding: 2px 8px; border-radius: 8px; align-self: center; white-space: nowrap; }
+.cpm-ok { color: #166534; font-size: 14px; padding: 6px 0; }</css>
+        <data_table>sp_instance</data_table>
+        <demo_data/>
+        <description/>
+        <docs/>
+        <field_list/>
+        <has_preview>false</has_preview>
+        <id>cpm_posture_dashboard</id>
+        <internal>false</internal>
+        <link><![CDATA[function link(scope, element, attrs, controller) {
+  
+}]]></link>
+        <name>CPM Posture Dashboard</name>
+        <option_schema/>
+        <public>false</public>
+        <roles/>
+        <script><![CDATA[(function() {
+  data.rows = [];
+  data.expiring = [];
+  data.unmapped = [];
+  data.kpi = { coverage: 0, services: 0, controls: 0, expiring: 0, expired: 0, unmapped: 0 };
+
+  var mappedIds = [], sumEvidenced = 0, sumTotal = 0;
+
+  var gr = new GlideRecordSecure('x_1929776_compli_0_service_posture');
+  gr.orderBy('coverage_pct');
+  gr.query();
+  while (gr.next()) {
+    var total = parseInt(gr.getValue('total_controls'), 10) || 0;
+    if (total === 0) continue;
+    var pct = parseInt(gr.getValue('coverage_pct'), 10) || 0;
+    var evidenced = parseInt(gr.getValue('with_valid_evidence'), 10) || 0;
+    mappedIds.push(gr.getValue('business_service'));
+    sumEvidenced += evidenced;
+    sumTotal += total;
+    data.rows.push({
+      sys_id: gr.getValue('business_service'),
+      service: gr.getDisplayValue('business_service'),
+      pct: pct,
+      total: total,
+      implemented: parseInt(gr.getValue('implemented'), 10) || 0,
+      evidenced: evidenced,
+      gap: total - evidenced,
+      level: pct < 50 ? 'danger' : (pct < 80 ? 'warn' : 'ok')
+    });
+  }
+  data.kpi.services = data.rows.length;
+  data.kpi.controls = sumTotal;
+  data.kpi.coverage = sumTotal ? Math.round(sumEvidenced / sumTotal * 100) : 0;
+
+  var ag = new GlideAggregate('x_1929776_compli_0_evidence');
+  ag.addAggregate('COUNT');
+  ag.groupBy('state');
+  ag.query();
+  while (ag.next()) {
+    var n = parseInt(ag.getAggregate('COUNT'), 10);
+    if (ag.getValue('state') == 'expiring') data.kpi.expiring = n;
+    if (ag.getValue('state') == 'expired') data.kpi.expired = n;
+  }
+
+  var svc = new GlideRecordSecure('cmdb_ci_service');
+  if (mappedIds.length) svc.addQuery('sys_id', 'NOT IN', mappedIds.join(','));
+  svc.addQuery('name', 'IN', 'Prepaid Billing,Customer CRM,Payment Gateway,Mobile Data Service');
+  svc.orderBy('name');
+  svc.query();
+  while (svc.next()) {
+    data.kpi.unmapped++;
+    if (data.unmapped.length < 8) data.unmapped.push({ name: svc.getValue('name') });
+  }
+
+  var ev = new GlideRecordSecure('x_1929776_compli_0_evidence');
+  ev.addQuery('state', 'expiring');
+  ev.orderBy('valid_until');
+  ev.setLimit(5);
+  ev.query();
+  while (ev.next()) {
+    data.expiring.push({
+      title: ev.getValue('title'),
+      control: ev.mapping.control.name + '',
+      service: ev.mapping.business_service.getDisplayValue(),
+      until: ev.getValue('valid_until')
+    });
+  }
+})();]]></script>
+        <servicenow>false</servicenow>
+        <sys_class_name>sp_widget</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-10-21 23:12:54</sys_created_on>
+        <sys_id>37c6bd827340d310a621f2024ab8b774</sys_id>
+        <sys_mod_count>5</sys_mod_count>
+        <sys_name>CPM Posture Dashboard</sys_name>
+        <sys_package display_value="Compliance Posture Mapper" source="x_1929776_compli_0">f7756d0a738c9310a621f2024ab8b707</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Compliance Posture Mapper">f7756d0a738c9310a621f2024ab8b707</sys_scope>
+        <sys_update_name>sp_widget_37c6bd827340d310a621f2024ab8b774</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-10-22 00:47:10</sys_updated_on>
+        <template><![CDATA[<div class="cpm">
+
+  <div class="cpm-hero">
+    <div class="cpm-hero-text">
+      <span class="cpm-eyebrow">GRC · CSDM</span>
+      <h2>Compliance Posture</h2>
+      <p>Control coverage and evidence health, by business service</p>
+    </div>
+    <div class="cpm-hero-ring">
+      <svg viewBox="0 0 64 64">
+        <circle class="track" cx="32" cy="32" r="26"></circle>
+        <circle class="bar" cx="32" cy="32" r="26" transform="rotate(-90 32 32)"
+                ng-attr-stroke-dasharray="{{data.kpi.coverage * 1.6336}} 163.36"></circle>
+      </svg>
+      <div class="cpm-hero-ring-label"><b>{{data.kpi.coverage}}%</b><span>overall</span></div>
+    </div>
+  </div>
+
+  <div class="cpm-kpis">
+    <div class="cpm-kpi"><b>{{data.kpi.services}}</b><span>Services tracked</span></div>
+    <div class="cpm-kpi"><b>{{data.kpi.controls}}</b><span>Control mappings</span></div>
+    <div class="cpm-kpi warn"><b>{{data.kpi.expiring}}</b><span>Evidence expiring</span></div>
+    <div class="cpm-kpi danger"><b>{{data.kpi.expired}}</b><span>Evidence expired</span></div>
+    <div class="cpm-kpi danger"><b>{{data.kpi.unmapped}}</b><span>Services with no controls</span></div>
+  </div>
+
+  <div class="cpm-toolbar">
+    <div class="cpm-chips">
+      <button ng-class="{active: c.filter=='all'}" ng-click="c.setFilter('all')">All ({{c.count('all')}})</button>
+      <button ng-class="{active: c.filter=='danger'}" ng-click="c.setFilter('danger')">Critical ({{c.count('danger')}})</button>
+      <button ng-class="{active: c.filter=='warn'}" ng-click="c.setFilter('warn')">At risk ({{c.count('warn')}})</button>
+      <button ng-class="{active: c.filter=='ok'}" ng-click="c.setFilter('ok')">Healthy ({{c.count('ok')}})</button>
+    </div>
+    <input type="text" class="cpm-search" ng-model="c.q" placeholder="Search a service…" />
+  </div>
+
+  <div class="cpm-grid">
+    <a class="cpm-card level-{{r.level}}" ng-repeat="r in data.rows | filter:c.match"
+       href="?id=cpm_service_detail&service={{r.sys_id}}">
+      <div class="cpm-card-head">
+        <svg viewBox="0 0 64 64" class="cpm-ring">
+          <circle class="track" cx="32" cy="32" r="26"></circle>
+          <circle class="bar" cx="32" cy="32" r="26" transform="rotate(-90 32 32)"
+                  ng-attr-stroke-dasharray="{{r.pct * 1.6336}} 163.36"></circle>
+          <text x="32" y="37" text-anchor="middle">{{r.pct}}%</text>
+        </svg>
+        <div>
+          <div class="cpm-card-title">{{r.service}}</div>
+          <span class="cpm-badge">{{r.level=='ok' ? 'Healthy' : (r.level=='warn' ? 'At risk' : 'Critical')}}</span>
+        </div>
+      </div>
+      <div class="cpm-card-stats">
+        <div><b>{{r.total}}</b><span>controls</span></div>
+        <div><b>{{r.implemented}}</b><span>implemented</span></div>
+        <div><b>{{r.evidenced}}</b><span>with evidence</span></div>
+        <div><b>{{r.gap}}</b><span>gaps</span></div>
+      </div>
+    </a>
+    <div class="cpm-empty" ng-if="!data.rows.length">No services with mapped controls yet.</div>
+  </div>
+
+  <div class="cpm-panels">
+    <div class="cpm-panel">
+      <h4>]]>🚫<![CDATA[ Services with no controls</h4>
+      <div class="cpm-row" ng-repeat="u in data.unmapped"><span>{{u.name}}</span><em>Not covered</em></div>
+      <div class="cpm-ok" ng-if="!data.unmapped.length">Every service has mapped controls.</div>
+    </div>
+    <div class="cpm-panel">
+      <h4>⏳ Evidence expiring soon</h4>
+      <div class="cpm-row" ng-repeat="e in data.expiring">
+        <span><b>{{e.title}}</b><small>{{e.control}} · {{e.service}}</small></span>
+        <em>{{e.until}}</em>
+      </div>
+      <div class="cpm-ok" ng-if="!data.expiring.length">Nothing expiring soon.</div>
+    </div>
+  </div>
+
+</div>]]></template>
+    </sp_widget>
+    <sys_update_version action="INSERT_OR_UPDATE">
+        <action>DELETE</action>
+        <application display_value="Compliance Posture Mapper">f7756d0a738c9310a621f2024ab8b707</application>
+        <file_path/>
+        <instance_id>d0c76825ebca8b98e9bbfddacad0cd41</instance_id>
+        <instance_name>dev433816</instance_name>
+        <merge_base/>
+        <name>sp_widget_37c6bd827340d310a621f2024ab8b774</name>
+        <payload>&lt;?xml version="1.0" encoding="UTF-8"?&gt;&lt;record_update table="sp_widget"&gt;&lt;sp_widget action="INSERT_OR_UPDATE"&gt;&lt;category&gt;custom&lt;/category&gt;&lt;client_script&gt;&lt;![CDATA[api.controller = function() {
+  var c = this;
+  c.filter = 'all';
+  c.q = '';
+  c.setFilter = function(f) { c.filter = f; };
+  c.match = function(r) {
+    if (c.filter !== 'all' &amp;&amp; r.level !== c.filter) return false;
+    return !c.q || r.service.toLowerCase().indexOf(c.q.toLowerCase()) &gt; -1;
+  };
+  c.count = function(f) {
+    return c.data.rows.filter(function(r) { return f === 'all' || r.level === f; }).length;
+  };
+};]]&gt;&lt;/client_script&gt;&lt;controller_as&gt;c&lt;/controller_as&gt;&lt;css&gt;.cpm { color: #1f2937; }
+.cpm * { box-sizing: border-box; }
+
+.cpm-hero { display: flex; justify-content: space-between; align-items: center;
+  padding: 24px 28px; border-radius: 16px; color: #fff; margin-bottom: 18px;
+  background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 60%, #0e7490 100%); }
+.cpm-hero h2 { margin: 4px 0; font-size: 26px; color: #fff; }
+.cpm-hero p { margin: 0; opacity: .8; }
+.cpm-eyebrow { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; opacity: .7; }
+.cpm-hero-ring { position: relative; width: 92px; height: 92px; flex: none; }
+.cpm-hero-ring svg { width: 100%; height: 100%; }
+.cpm-hero-ring-label { position: absolute; top: 0; left: 0; right: 0; bottom: 0; display: flex;
+  flex-direction: column; align-items: center; justify-content: center; }
+.cpm-hero-ring-label b { font-size: 21px; line-height: 1; }
+.cpm-hero-ring-label span { font-size: 10px; opacity: .7; }
+.cpm-hero .track { fill: none; stroke: rgba(255,255,255,.2); stroke-width: 7; }
+.cpm-hero .bar { fill: none; stroke: #5eead4; stroke-width: 7; stroke-linecap: round; }
+
+.cpm-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; margin-bottom: 20px; }
+.cpm-kpi { background: #fff; border-radius: 12px; padding: 14px 16px; border: 1px solid #e5e7eb; border-left: 4px solid #3b82f6; }
+.cpm-kpi b { display: block; font-size: 26px; line-height: 1.1; }
+.cpm-kpi span { font-size: 12px; color: #6b7280; }
+.cpm-kpi.warn { border-left-color: #f59e0b; }
+.cpm-kpi.danger { border-left-color: #ef4444; }
+
+.cpm-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.cpm-chips button { border: 1px solid #d1d5db; background: #fff; border-radius: 999px;
+  padding: 6px 14px; margin-right: 6px; font-size: 13px; cursor: pointer; }
+.cpm-chips button.active { background: #1e3a8a; color: #fff; border-color: #1e3a8a; }
+.cpm-search { border: 1px solid #d1d5db; border-radius: 10px; padding: 8px 12px; min-width: 220px; }
+
+.cpm-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 16px; margin-bottom: 22px; }
+.cpm-card { display: block; background: #fff; border-radius: 16px; padding: 18px; color: inherit;
+  border: 1px solid #e5e7eb; transition: transform .15s, box-shadow .15s; }
+.cpm-card:hover { transform: translateY(-3px); box-shadow: 0 10px 24px rgba(15,23,42,.12); text-decoration: none; color: inherit; }
+.cpm-card-head { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
+.cpm-card-title { font-weight: 600; font-size: 16px; margin-bottom: 4px; }
+.cpm-ring { width: 64px; height: 64px; flex: none; }
+.cpm-ring .track { fill: none; stroke: #e5e7eb; stroke-width: 7; }
+.cpm-ring .bar { fill: none; stroke-width: 7; stroke-linecap: round; }
+.cpm-ring text { font-size: 15px; font-weight: 700; fill: #111827; }
+.level-ok .bar { stroke: #16a34a; }    .level-ok .cpm-badge { background: #dcfce7; color: #166534; }
+.level-warn .bar { stroke: #f59e0b; }  .level-warn .cpm-badge { background: #fef3c7; color: #92400e; }
+.level-danger .bar { stroke: #ef4444; } .level-danger .cpm-badge { background: #fee2e2; color: #991b1b; }
+.cpm-badge { font-size: 11px; padding: 2px 10px; border-radius: 999px; font-weight: 600; }
+.cpm-card-stats { display: grid; grid-template-columns: repeat(4, 1fr); text-align: center; border-top: 1px solid #f3f4f6; padding-top: 12px; }
+.cpm-card-stats b { display: block; font-size: 18px; }
+.cpm-card-stats span { font-size: 11px; color: #6b7280; }
+.cpm-empty { grid-column: 1 / -1; text-align: center; color: #6b7280; padding: 30px; }
+
+.cpm-panels { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
+.cpm-panel { background: #fff; border-radius: 16px; padding: 16px 20px; border: 1px solid #e5e7eb; }
+.cpm-panel h4 { margin: 0 0 10px; font-size: 15px; }
+.cpm-row { display: flex; justify-content: space-between; gap: 10px; padding: 9px 0; border-top: 1px solid #f3f4f6; font-size: 14px; }
+.cpm-row small { display: block; color: #6b7280; }
+.cpm-row em { font-style: normal; font-size: 12px; color: #b45309; background: #fef3c7; padding: 2px 8px; border-radius: 8px; align-self: center; white-space: nowrap; }
+.cpm-ok { color: #166534; font-size: 14px; padding: 6px 0; }&lt;/css&gt;&lt;data_table&gt;sp_instance&lt;/data_table&gt;&lt;demo_data/&gt;&lt;description/&gt;&lt;docs/&gt;&lt;field_list/&gt;&lt;has_preview&gt;false&lt;/has_preview&gt;&lt;id&gt;cpm_posture_dashboard&lt;/id&gt;&lt;internal&gt;false&lt;/internal&gt;&lt;link&gt;&lt;![CDATA[function link(scope, element, attrs, controller) {
+  
+}]]&gt;&lt;/link&gt;&lt;name&gt;CPM Posture Dashboard&lt;/name&gt;&lt;option_schema/&gt;&lt;public&gt;false&lt;/public&gt;&lt;roles/&gt;&lt;script&gt;&lt;![CDATA[(function() {
+  data.rows = [];
+  data.expiring = [];
+  data.unmapped = [];
+  data.kpi = { coverage: 0, services: 0, controls: 0, expiring: 0, expired: 0, unmapped: 0 };
+
+  var mappedIds = [], sumEvidenced = 0, sumTotal = 0;
+
+  var gr = new GlideRecordSecure('x_1929776_compli_0_service_posture');
+  gr.orderBy('coverage_pct');
+  gr.query();
+  while (gr.next()) {
+    var total = parseInt(gr.getValue('total_controls'), 10) || 0;
+    if (total === 0) continue;
+    var pct = parseInt(gr.getValue('coverage_pct'), 10) || 0;
+    var evidenced = parseInt(gr.getValue('with_valid_evidence'), 10) || 0;
+    mappedIds.push(gr.getValue('business_service'));
+    sumEvidenced += evidenced;
+    sumTotal += total;
+    data.rows.push({
+      sys_id: gr.getValue('business_service'),
+      service: gr.getDisplayValue('business_service'),
+      pct: pct,
+      total: total,
+      implemented: parseInt(gr.getValue('implemented'), 10) || 0,
+      evidenced: evidenced,
+      gap: total - evidenced,
+      level: pct &lt; 50 ? 'danger' : (pct &lt; 80 ? 'warn' : 'ok')
+    });
+  }
+  data.kpi.services = data.rows.length;
+  data.kpi.controls = sumTotal;
+  data.kpi.coverage = sumTotal ? Math.round(sumEvidenced / sumTotal * 100) : 0;
+
+  var ag = new GlideAggregate('x_1929776_compli_0_evidence');
+  ag.addAggregate('COUNT');
+  ag.groupBy('state');
+  ag.query();
+  while (ag.next()) {
+    var n = parseInt(ag.getAggregate('COUNT'), 10);
+    if (ag.getValue('state') == 'expiring') data.kpi.expiring = n;
+    if (ag.getValue('state') == 'expired') data.kpi.expired = n;
+  }
+
+  var svc = new GlideRecordSecure('cmdb_ci_service');
+  if (mappedIds.length) svc.addQuery('sys_id', 'NOT IN', mappedIds.join(','));
+  svc.addQuery('name', 'IN', 'Prepaid Billing,Customer CRM,Payment Gateway,Mobile Data Service');
+  svc.orderBy('name');
+  svc.query();
+  while (svc.next()) {
+    data.kpi.unmapped++;
+    if (data.unmapped.length &lt; 8) data.unmapped.push({ name: svc.getValue('name') });
+  }
+
+  var ev = new GlideRecordSecure('x_1929776_compli_0_evidence');
+  ev.addQuery('state', 'expiring');
+  ev.orderBy('valid_until');
+  ev.setLimit(5);
+  ev.query();
+  while (ev.next()) {
+    data.expiring.push({
+      title: ev.getValue('title'),
+      control: ev.mapping.control.name + '',
+      service: ev.mapping.business_service.getDisplayValue(),
+      until: ev.getValue('valid_until')
+    });
+  }
+})();]]&gt;&lt;/script&gt;&lt;servicenow&gt;false&lt;/servicenow&gt;&lt;sys_class_name&gt;sp_widget&lt;/sys_class_name&gt;&lt;sys_created_by&gt;admin&lt;/sys_created_by&gt;&lt;sys_created_on&gt;2026-10-21 23:12:54&lt;/sys_created_on&gt;&lt;sys_id&gt;37c6bd827340d310a621f2024ab8b774&lt;/sys_id&gt;&lt;sys_mod_count&gt;5&lt;/sys_mod_count&gt;&lt;sys_name&gt;CPM Posture Dashboard&lt;/sys_name&gt;&lt;sys_package display_value="Compliance Posture Mapper" source="x_1929776_compli_0"&gt;f7756d0a738c9310a621f2024ab8b707&lt;/sys_package&gt;&lt;sys_policy/&gt;&lt;sys_scope display_value="Compliance Posture Mapper"&gt;f7756d0a738c9310a621f2024ab8b707&lt;/sys_scope&gt;&lt;sys_update_name&gt;sp_widget_37c6bd827340d310a621f2024ab8b774&lt;/sys_update_name&gt;&lt;sys_updated_by&gt;admin&lt;/sys_updated_by&gt;&lt;sys_updated_on&gt;2026-10-22 00:47:10&lt;/sys_updated_on&gt;&lt;template&gt;&lt;![CDATA[&lt;div class="cpm"&gt;
+
+  &lt;div class="cpm-hero"&gt;
+    &lt;div class="cpm-hero-text"&gt;
+      &lt;span class="cpm-eyebrow"&gt;GRC · CSDM&lt;/span&gt;
+      &lt;h2&gt;Compliance Posture&lt;/h2&gt;
+      &lt;p&gt;Control coverage and evidence health, by business service&lt;/p&gt;
+    &lt;/div&gt;
+    &lt;div class="cpm-hero-ring"&gt;
+      &lt;svg viewBox="0 0 64 64"&gt;
+        &lt;circle class="track" cx="32" cy="32" r="26"&gt;&lt;/circle&gt;
+        &lt;circle class="bar" cx="32" cy="32" r="26" transform="rotate(-90 32 32)"
+                ng-attr-stroke-dasharray="{{data.kpi.coverage * 1.6336}} 163.36"&gt;&lt;/circle&gt;
+      &lt;/svg&gt;
+      &lt;div class="cpm-hero-ring-label"&gt;&lt;b&gt;{{data.kpi.coverage}}%&lt;/b&gt;&lt;span&gt;overall&lt;/span&gt;&lt;/div&gt;
+    &lt;/div&gt;
+  &lt;/div&gt;
+
+  &lt;div class="cpm-kpis"&gt;
+    &lt;div class="cpm-kpi"&gt;&lt;b&gt;{{data.kpi.services}}&lt;/b&gt;&lt;span&gt;Services tracked&lt;/span&gt;&lt;/div&gt;
+    &lt;div class="cpm-kpi"&gt;&lt;b&gt;{{data.kpi.controls}}&lt;/b&gt;&lt;span&gt;Control mappings&lt;/span&gt;&lt;/div&gt;
+    &lt;div class="cpm-kpi warn"&gt;&lt;b&gt;{{data.kpi.expiring}}&lt;/b&gt;&lt;span&gt;Evidence expiring&lt;/span&gt;&lt;/div&gt;
+    &lt;div class="cpm-kpi danger"&gt;&lt;b&gt;{{data.kpi.expired}}&lt;/b&gt;&lt;span&gt;Evidence expired&lt;/span&gt;&lt;/div&gt;
+    &lt;div class="cpm-kpi danger"&gt;&lt;b&gt;{{data.kpi.unmapped}}&lt;/b&gt;&lt;span&gt;Services with no controls&lt;/span&gt;&lt;/div&gt;
+  &lt;/div&gt;
+
+  &lt;div class="cpm-toolbar"&gt;
+    &lt;div class="cpm-chips"&gt;
+      &lt;button ng-class="{active: c.filter=='all'}" ng-click="c.setFilter('all')"&gt;All ({{c.count('all')}})&lt;/button&gt;
+      &lt;button ng-class="{active: c.filter=='danger'}" ng-click="c.setFilter('danger')"&gt;Critical ({{c.count('danger')}})&lt;/button&gt;
+      &lt;button ng-class="{active: c.filter=='warn'}" ng-click="c.setFilter('warn')"&gt;At risk ({{c.count('warn')}})&lt;/button&gt;
+      &lt;button ng-class="{active: c.filter=='ok'}" ng-click="c.setFilter('ok')"&gt;Healthy ({{c.count('ok')}})&lt;/button&gt;
+    &lt;/div&gt;
+    &lt;input type="text" class="cpm-search" ng-model="c.q" placeholder="Search a service…" /&gt;
+  &lt;/div&gt;
+
+  &lt;div class="cpm-grid"&gt;
+    &lt;a class="cpm-card level-{{r.level}}" ng-repeat="r in data.rows | filter:c.match"
+       href="?id=cpm_service_detail&amp;service={{r.sys_id}}"&gt;
+      &lt;div class="cpm-card-head"&gt;
+        &lt;svg viewBox="0 0 64 64" class="cpm-ring"&gt;
+          &lt;circle class="track" cx="32" cy="32" r="26"&gt;&lt;/circle&gt;
+          &lt;circle class="bar" cx="32" cy="32" r="26" transform="rotate(-90 32 32)"
+                  ng-attr-stroke-dasharray="{{r.pct * 1.6336}} 163.36"&gt;&lt;/circle&gt;
+          &lt;text x="32" y="37" text-anchor="middle"&gt;{{r.pct}}%&lt;/text&gt;
+        &lt;/svg&gt;
+        &lt;div&gt;
+          &lt;div class="cpm-card-title"&gt;{{r.service}}&lt;/div&gt;
+          &lt;span class="cpm-badge"&gt;{{r.level=='ok' ? 'Healthy' : (r.level=='warn' ? 'At risk' : 'Critical')}}&lt;/span&gt;
+        &lt;/div&gt;
+      &lt;/div&gt;
+      &lt;div class="cpm-card-stats"&gt;
+        &lt;div&gt;&lt;b&gt;{{r.total}}&lt;/b&gt;&lt;span&gt;controls&lt;/span&gt;&lt;/div&gt;
+        &lt;div&gt;&lt;b&gt;{{r.implemented}}&lt;/b&gt;&lt;span&gt;implemented&lt;/span&gt;&lt;/div&gt;
+        &lt;div&gt;&lt;b&gt;{{r.evidenced}}&lt;/b&gt;&lt;span&gt;with evidence&lt;/span&gt;&lt;/div&gt;
+        &lt;div&gt;&lt;b&gt;{{r.gap}}&lt;/b&gt;&lt;span&gt;gaps&lt;/span&gt;&lt;/div&gt;
+      &lt;/div&gt;
+    &lt;/a&gt;
+    &lt;div class="cpm-empty" ng-if="!data.rows.length"&gt;No services with mapped controls yet.&lt;/div&gt;
+  &lt;/div&gt;
+
+  &lt;div class="cpm-panels"&gt;
+    &lt;div class="cpm-panel"&gt;
+      &lt;h4&gt;]]&gt;🚫&lt;![CDATA[ Services with no controls&lt;/h4&gt;
+      &lt;div class="cpm-row" ng-repeat="u in data.unmapped"&gt;&lt;span&gt;{{u.name}}&lt;/span&gt;&lt;em&gt;Not covered&lt;/em&gt;&lt;/div&gt;
+      &lt;div class="cpm-ok" ng-if="!data.unmapped.length"&gt;Every service has mapped controls.&lt;/div&gt;
+    &lt;/div&gt;
+    &lt;div class="cpm-panel"&gt;
+      &lt;h4&gt;⏳ Evidence expiring soon&lt;/h4&gt;
+      &lt;div class="cpm-row" ng-repeat="e in data.expiring"&gt;
+        &lt;span&gt;&lt;b&gt;{{e.title}}&lt;/b&gt;&lt;small&gt;{{e.control}} · {{e.service}}&lt;/small&gt;&lt;/span&gt;
+        &lt;em&gt;{{e.until}}&lt;/em&gt;
+      &lt;/div&gt;
+      &lt;div class="cpm-ok" ng-if="!data.expiring.length"&gt;Nothing expiring soon.&lt;/div&gt;
+    &lt;/div&gt;
+  &lt;/div&gt;
+
+&lt;/div&gt;]]&gt;&lt;/template&gt;&lt;/sp_widget&gt;&lt;/record_update&gt;</payload>
+        <payload_hash>1175159851</payload_hash>
+        <record_name>CPM Posture Dashboard</record_name>
+        <reverted_from/>
+        <source>c8856d0a738c9310a621f2024ab8b710</source>
+        <source_table>sys_update_set</source_table>
+        <state>previous</state>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-10-22 00:47:10</sys_created_on>
+        <sys_id>a5fc460e73c0d310a621f2024ab8b7d8</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_recorded_at>1a1611382120000001</sys_recorded_at>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-10-22 00:47:10</sys_updated_on>
+        <type>Widget</type>
+        <update_guid>a5fc460e3dc0d310cfba63817257ffd7</update_guid>
+        <update_guid_history>a5fc460e3dc0d310cfba63817257ffd7:1175159851,14930a0e1980d310932b9779f2b2d349:-195076233,fe6ff1866380d3102f0e59e69d19e98b:255099847,866ef1c2b080d310ba35d12fd7476be9:-1968867077,eafabd0eab40d3100f1fdad07cea5ae4:1586505929,0d67b9060640d310e9729f627ce1ba1c:1911218233</update_guid_history>
+    </sys_update_version>
+    <sys_metadata_delete action="INSERT_OR_UPDATE">
+        <sys_audit_delete display_value="CPM Posture Dashboard">08a983b273c01310a621f2024ab8b7b6</sys_audit_delete>
+        <sys_class_name>sys_metadata_delete</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-10-24 13:07:40</sys_created_on>
+        <sys_db_object display_value="" name="sp_widget">sp_widget</sys_db_object>
+        <sys_id>784964fc300f44809654a77e6c389000</sys_id>
+        <sys_metadata>37c6bd827340d310a621f2024ab8b774</sys_metadata>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>CPM Posture Dashboard</sys_name>
+        <sys_package display_value="Compliance Posture Mapper" source="x_1929776_compli_0">f7756d0a738c9310a621f2024ab8b707</sys_package>
+        <sys_parent/>
+        <sys_policy/>
+        <sys_scope display_value="Compliance Posture Mapper">f7756d0a738c9310a621f2024ab8b707</sys_scope>
+        <sys_scope_delete display_value="">01361efd492541088029ed23d04a1640</sys_scope_delete>
+        <sys_update_name>sp_widget_37c6bd827340d310a621f2024ab8b774</sys_update_name>
+        <sys_update_version display_value="sp_widget_37c6bd827340d310a621f2024ab8b774">a5fc460e73c0d310a621f2024ab8b7d8</sys_update_version>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-10-24 13:07:40</sys_updated_on>
+    </sys_metadata_delete>
+</record_update>
