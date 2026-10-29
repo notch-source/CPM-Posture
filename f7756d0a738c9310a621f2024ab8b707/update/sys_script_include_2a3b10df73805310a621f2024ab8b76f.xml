@@ -9,15 +9,15 @@
         <mobile_callable>false</mobile_callable>
         <name>CPMMapping</name>
         <sandbox_callable>false</sandbox_callable>
-        <script><![CDATA[// Role: keeps the Mapping table in line with each control's "Targets" list and with the CMDB owners,
-//       and moves stale evidence to Expired. Nobody edits Mapping rows by hand.
+        <script><![CDATA[// Role: keeps the Mapping table in line with each control's "Targets" list (and, when asked, with the components
+//       of those targets), with the CMDB owners, and moves stale evidence to Expired. Nobody edits Mapping rows by hand.
 var CPMMapping = Class.create();
 CPMMapping.prototype = {
   initialize: function() {
     this.util = new CPMUtil();
   },
 
-  // Role: makes the mappings of one control match its "Targets" list.
+  // Role: makes the mappings of one control match what the control asks for.
   //       New targets get a Missing mapping, removed targets are deactivated (history is kept),
   //       and every owner is brought in line with the CMDB.
   syncControl: function(control) {
@@ -26,22 +26,25 @@ CPMMapping.prototype = {
     var controlId = control.getUniqueValue();
 
     for (var id in wanted) {
+      var want = wanted[id];
       var have = existing[id];
-      if (!have) this._create(controlId, id, wanted[id]);
-      else if (!have.active || have.owner !== (wanted[id] || '')) this._update(have.id, true, wanted[id]);
+      if (!have) this._create(controlId, id, want);
+      else if (!have.active || have.owner !== want.owner || have.via !== want.via) this._update(have.id, true, want);
     }
     for (var other in existing) {
-      if (!(other in wanted) && existing[other].active) this._update(existing[other].id, false);
+      if (!(other in wanted) && existing[other].active) this._update(existing[other].id, false, null);
     }
   },
 
   // Role: nightly. Copies the CMDB owner onto every active mapping, so a change of owner in the CMDB needs no action here.
+  //       A component without owner takes the owner of the service it was included through.
   refreshOwners: function() {
     var mapping = new GlideRecord('x_1929776_compli_0_mapping');
     mapping.addQuery('active', true);
     mapping.query();
     while (mapping.next()) {
       var owner = (mapping.target.owned_by + '') || (mapping.target.managed_by + '') ||
+                  (mapping.via_service.owned_by + '') || (mapping.via_service.managed_by + '') ||
                   this.util.prop('fallback_owner', '');
       if (owner !== (mapping.getValue('owner') || '')) {
         mapping.setValue('owner', owner);
@@ -71,21 +74,45 @@ CPMMapping.prototype = {
     }
   },
 
-  // Role: the targets a control should apply to, as { targetId: ownerId }.
+  // Role: everything a control should apply to, as { ciId: { owner, via } }.
+  //       "via" is empty for a target picked by the admin, and holds the service id for a component added automatically.
   _wanted: function(control) {
     var wanted = {};
     var list = control.getValue('active') == '1' ? (control.getValue('targets') || '') : '';
     var ids = list.split(',').filter(String);
     if (!ids.length) return wanted;
 
+    var targetOwner = {};
     var ci = new GlideRecord('cmdb_ci');
     ci.addQuery('sys_id', 'IN', ids.join(','));
     ci.query();
-    while (ci.next()) wanted[ci.getUniqueValue()] = this.util.ownerOf(ci);
+    while (ci.next()) {
+      targetOwner[ci.getUniqueValue()] = this.util.ownerOf(ci) || '';
+      wanted[ci.getUniqueValue()] = { owner: targetOwner[ci.getUniqueValue()], via: '' };
+    }
+    if (control.getValue('include_components') == '1') this._addComponents(wanted, targetOwner);
     return wanted;
   },
 
-  // Role: the mappings that already exist for a control, as { targetId: { id, active, owner } }.
+  // Role: adds the components of every target (found through the CMDB relationships) to the wanted list.
+  //       A CI that is already wanted keeps its first reason. A component without owner inherits the service owner.
+  _addComponents: function(wanted, targetOwner) {
+    var scope = new CPMScope();
+    for (var targetId in targetOwner) {
+      var ids = Object.keys(scope.componentsOf(targetId)).filter(function(id) { return !wanted[id]; });
+      if (!ids.length) continue;
+      var ci = new GlideRecord('cmdb_ci');
+      ci.addQuery('sys_id', 'IN', ids.join(','));
+      ci.query();
+      while (ci.next()) {
+        var id = ci.getUniqueValue();
+        if (wanted[id]) continue;
+        wanted[id] = { owner: ci.getValue('owned_by') || ci.getValue('managed_by') || targetOwner[targetId], via: targetId };
+      }
+    }
+  },
+
+  // Role: the mappings that already exist for a control, as { ciId: { id, active, owner, via } }.
   _existing: function(control) {
     var map = {};
     var mapping = new GlideRecord('x_1929776_compli_0_mapping');
@@ -95,30 +122,35 @@ CPMMapping.prototype = {
       map[mapping.getValue('target')] = {
         id: mapping.getUniqueValue(),
         active: mapping.getValue('active') == '1',
-        owner: mapping.getValue('owner') || ''
+        owner: mapping.getValue('owner') || '',
+        via: mapping.getValue('via_service') || ''
       };
     }
     return map;
   },
 
   // Role: creates a blank mapping. Its first state is Missing: the owner has to provide evidence.
-  _create: function(controlId, targetId, owner) {
+  _create: function(controlId, targetId, want) {
     var mapping = new GlideRecord('x_1929776_compli_0_mapping');
     mapping.initialize();
     mapping.setValue('control', controlId);
     mapping.setValue('target', targetId);
-    mapping.setValue('owner', owner || '');
+    mapping.setValue('owner', want.owner);
+    mapping.setValue('via_service', want.via);
     mapping.setValue('state', 'missing');
     mapping.setValue('active', true);
     mapping.insert();
   },
 
-  // Role: switches a mapping on or off, and sets its owner when one is given.
-  _update: function(mappingId, active, owner) {
+  // Role: switches a mapping on or off, and when "want" is given, refreshes its owner and its reason for being there.
+  _update: function(mappingId, active, want) {
     var mapping = new GlideRecord('x_1929776_compli_0_mapping');
     if (!mapping.get(mappingId)) return;
     mapping.setValue('active', active);
-    if (owner !== undefined) mapping.setValue('owner', owner || '');
+    if (want) {
+      mapping.setValue('owner', want.owner);
+      mapping.setValue('via_service', want.via);
+    }
     mapping.update();
   },
 
@@ -128,13 +160,13 @@ CPMMapping.prototype = {
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2026-10-25 13:43:00</sys_created_on>
         <sys_id>2a3b10df73805310a621f2024ab8b76f</sys_id>
-        <sys_mod_count>5</sys_mod_count>
+        <sys_mod_count>6</sys_mod_count>
         <sys_name>CPMMapping</sys_name>
         <sys_package display_value="Compliance Posture Mapper" source="x_1929776_compli_0">f7756d0a738c9310a621f2024ab8b707</sys_package>
         <sys_policy>read</sys_policy>
         <sys_scope display_value="Compliance Posture Mapper">f7756d0a738c9310a621f2024ab8b707</sys_scope>
         <sys_update_name>sys_script_include_2a3b10df73805310a621f2024ab8b76f</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
-        <sys_updated_on>2026-10-27 16:46:12</sys_updated_on>
+        <sys_updated_on>2026-10-27 23:49:08</sys_updated_on>
     </sys_script_include>
 </record_update>

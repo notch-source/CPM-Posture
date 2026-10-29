@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_ws_operation">
+    <sys_ws_operation action="DELETE">
+        <active>false</active>
+        <consumes>application/octet-stream</consumes>
+        <consumes_customized>false</consumes_customized>
+        <default_operation_uri/>
+        <enforce_acl/>
+        <http_method>POST</http_method>
+        <name>upload</name>
+        <operation_script><![CDATA[// Role: receives one file for one mapping and hands it to CPMEvidence, which does all the checks.
+//       The browser sends the raw file; its declared type and name travel as query parameters.
+(function process(/*RESTAPIRequest*/ request, /*RESTAPIResponse*/ response) {
+  var file = {
+    name: String(request.queryParams.file_name || '').replace(/[\\\/]/g, '_').substring(0, 100),
+    type: String(request.queryParams.content_type || '').toLowerCase(),
+    size: parseInt(request.getHeader('content-length'), 10) || 0
+  };
+  gs.info("--- REST API TEST --- Mapping SysID called: " + pathParams.sys_id);
+  var result = new CPMEvidence().receive(request.pathParams.mapping, file, request.body.dataStream);
+  response.setStatus(result.status);
+  response.setBody(result.body);
+})(request, response);]]></operation_script>
+        <operation_uri>/api/x_1929776_compli_0/evidence/{mapping}</operation_uri>
+        <produces>application/json,application/xml,text/xml</produces>
+        <produces_customized>false</produces_customized>
+        <relative_path>/{mapping}</relative_path>
+        <request_example/>
+        <requires_acl_authorization>false</requires_acl_authorization>
+        <requires_authentication>true</requires_authentication>
+        <requires_snc_internal_role>true</requires_snc_internal_role>
+        <short_description/>
+        <support_trailing_slash>false</support_trailing_slash>
+        <sys_class_name>sys_ws_operation</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-10-24 12:22:48</sys_created_on>
+        <sys_id>e8eeba3e73401310a621f2024ab8b72a</sys_id>
+        <sys_mod_count>7</sys_mod_count>
+        <sys_name>upload</sys_name>
+        <sys_package display_value="Compliance Posture Mapper" source="x_1929776_compli_0">f7756d0a738c9310a621f2024ab8b707</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Compliance Posture Mapper">f7756d0a738c9310a621f2024ab8b707</sys_scope>
+        <sys_update_name>sys_ws_operation_e8eeba3e73401310a621f2024ab8b72a</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-10-25 23:12:26</sys_updated_on>
+        <web_service_definition display_value="Compliance Evidence">6c2d32f673401310a621f2024ab8b7a5</web_service_definition>
+        <web_service_version/>
+    </sys_ws_operation>
+    <sys_update_version action="INSERT_OR_UPDATE">
+        <action>DELETE</action>
+        <application display_value="Compliance Posture Mapper">f7756d0a738c9310a621f2024ab8b707</application>
+        <file_path/>
+        <instance_id>d0c76825ebca8b98e9bbfddacad0cd41</instance_id>
+        <instance_name>dev433816</instance_name>
+        <merge_base/>
+        <name>sys_ws_operation_e8eeba3e73401310a621f2024ab8b72a</name>
+        <payload>&lt;?xml version="1.0" encoding="UTF-8"?&gt;&lt;record_update table="sys_ws_operation"&gt;&lt;sys_ws_operation action="INSERT_OR_UPDATE"&gt;&lt;active&gt;false&lt;/active&gt;&lt;consumes&gt;application/octet-stream&lt;/consumes&gt;&lt;consumes_customized&gt;false&lt;/consumes_customized&gt;&lt;default_operation_uri/&gt;&lt;enforce_acl/&gt;&lt;http_method&gt;POST&lt;/http_method&gt;&lt;name&gt;upload&lt;/name&gt;&lt;operation_script&gt;&lt;![CDATA[// Role: receives one file for one mapping and hands it to CPMEvidence, which does all the checks.
+//       The browser sends the raw file; its declared type and name travel as query parameters.
+(function process(/*RESTAPIRequest*/ request, /*RESTAPIResponse*/ response) {
+  var file = {
+    name: String(request.queryParams.file_name || '').replace(/[\\\/]/g, '_').substring(0, 100),
+    type: String(request.queryParams.content_type || '').toLowerCase(),
+    size: parseInt(request.getHeader('content-length'), 10) || 0
+  };
+  gs.info("--- REST API TEST --- Mapping SysID called: " + pathParams.sys_id);
+  var result = new CPMEvidence().receive(request.pathParams.mapping, file, request.body.dataStream);
+  response.setStatus(result.status);
+  response.setBody(result.body);
+})(request, response);]]&gt;&lt;/operation_script&gt;&lt;operation_uri&gt;/api/x_1929776_compli_0/evidence/{mapping}&lt;/operation_uri&gt;&lt;produces&gt;application/json,application/xml,text/xml&lt;/produces&gt;&lt;produces_customized&gt;false&lt;/produces_customized&gt;&lt;relative_path&gt;/{mapping}&lt;/relative_path&gt;&lt;request_example/&gt;&lt;requires_acl_authorization&gt;false&lt;/requires_acl_authorization&gt;&lt;requires_authentication&gt;true&lt;/requires_authentication&gt;&lt;requires_snc_internal_role&gt;true&lt;/requires_snc_internal_role&gt;&lt;short_description/&gt;&lt;support_trailing_slash&gt;false&lt;/support_trailing_slash&gt;&lt;sys_class_name&gt;sys_ws_operation&lt;/sys_class_name&gt;&lt;sys_created_by&gt;admin&lt;/sys_created_by&gt;&lt;sys_created_on&gt;2026-10-24 12:22:48&lt;/sys_created_on&gt;&lt;sys_id&gt;e8eeba3e73401310a621f2024ab8b72a&lt;/sys_id&gt;&lt;sys_mod_count&gt;7&lt;/sys_mod_count&gt;&lt;sys_name&gt;upload&lt;/sys_name&gt;&lt;sys_package display_value="Compliance Posture Mapper" source="x_1929776_compli_0"&gt;f7756d0a738c9310a621f2024ab8b707&lt;/sys_package&gt;&lt;sys_policy/&gt;&lt;sys_scope display_value="Compliance Posture Mapper"&gt;f7756d0a738c9310a621f2024ab8b707&lt;/sys_scope&gt;&lt;sys_update_name&gt;sys_ws_operation_e8eeba3e73401310a621f2024ab8b72a&lt;/sys_update_name&gt;&lt;sys_updated_by&gt;admin&lt;/sys_updated_by&gt;&lt;sys_updated_on&gt;2026-10-25 23:12:26&lt;/sys_updated_on&gt;&lt;web_service_definition display_value="Compliance Evidence"&gt;6c2d32f673401310a621f2024ab8b7a5&lt;/web_service_definition&gt;&lt;web_service_version/&gt;&lt;/sys_ws_operation&gt;&lt;/record_update&gt;</payload>
+        <payload_hash>-1079532745</payload_hash>
+        <record_name>upload</record_name>
+        <reverted_from/>
+        <source>c8856d0a738c9310a621f2024ab8b710</source>
+        <source_table>sys_update_set</source_table>
+        <state>previous</state>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-10-25 23:12:26</sys_created_on>
+        <sys_id>74ad969373c09310a621f2024ab8b70a</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_recorded_at>1a1755633e80000001</sys_recorded_at>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-10-25 23:12:26</sys_updated_on>
+        <type>Scripted REST Resource</type>
+        <update_guid>34ad96939dc0931006dbc83713b95709</update_guid>
+        <update_guid_history>34ad96939dc0931006dbc83713b95709:-1079532745,edadc957c9485310464fef52d24bc4dd:-1908907888,e6cc81174c485310d66d084fbb34fd1c:165774069,47d8c51f960853105600f07ff36b62a2:-2078916920,dbf0091f8fc45310f06469e2b969ea84:1260106237,facf309bdac4531019bee007a14fc48d:-228219686,3a7e58970cc05310e6cc35d56a7a1796:-2078916920,c35f3a7e2f401310e69b857db82e4153:-1925567949</update_guid_history>
+    </sys_update_version>
+    <sys_metadata_delete action="INSERT_OR_UPDATE">
+        <sys_audit_delete/>
+        <sys_class_name>sys_metadata_delete</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-10-28 01:08:12</sys_created_on>
+        <sys_db_object display_value="" name="sys_ws_operation">sys_ws_operation</sys_db_object>
+        <sys_id>104e8b42c0704c70b707546523f50be4</sys_id>
+        <sys_metadata>e8eeba3e73401310a621f2024ab8b72a</sys_metadata>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>upload</sys_name>
+        <sys_package display_value="Compliance Posture Mapper" source="x_1929776_compli_0">f7756d0a738c9310a621f2024ab8b707</sys_package>
+        <sys_parent/>
+        <sys_policy/>
+        <sys_scope display_value="Compliance Posture Mapper">f7756d0a738c9310a621f2024ab8b707</sys_scope>
+        <sys_scope_delete display_value="">01361efd492541088029ed23d04a1640</sys_scope_delete>
+        <sys_update_name>sys_ws_operation_e8eeba3e73401310a621f2024ab8b72a</sys_update_name>
+        <sys_update_version display_value="sys_ws_operation_e8eeba3e73401310a621f2024ab8b72a">74ad969373c09310a621f2024ab8b70a</sys_update_version>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-10-28 01:08:12</sys_updated_on>
+    </sys_metadata_delete>
+</record_update>

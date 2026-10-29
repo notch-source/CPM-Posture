@@ -13,7 +13,7 @@
 //       Every query that lists data for a user applies the access rules of CPMAccess explicitly.
 var CPMStats = Class.create();
 CPMStats.prototype = {
-  VERSION: '9',     // shown at the bottom of the page: if it is not 9, this Script Include was not replaced
+  VERSION: '10',    // shown at the bottom of the page: if it is not 10, this Script Include was not replaced
   MAX_CARDS: 500,   // a card list shows up to 500 cards (the weakest first); the headline numbers always cover everything
   RISK_ORDER: { red: 0, yellow: 1, green: 2, not_assessed: 3 },
   TODO_ORDER: { rejected: 0, expired: 1, missing: 2, expiring: 3 },
@@ -120,19 +120,19 @@ CPMStats.prototype = {
   followUp: function(ownerId, limit) {
     var who = ownerId ? 'owner=' + ownerId + '^' : '';
     var out = {
-      need: this._mappingList(who + 'active=true^stateINmissing,rejected', 'target', limit),
-      expiring: this._mappingList(who + 'active=true^state=approved^valid_until<=' + this.util.horizon(), 'valid_until', limit),
-      stale: this._mappingList(who + 'active=true^state=expired', 'target', limit)
+      need: this._mappingList(who + 'active=true^stateINmissing,rejected', 'target', limit, ''),
+      expiring: this._mappingList(who + 'active=true^state=approved^valid_until<=' + this.util.horizon(), 'valid_until', limit, 'expiring'),
+      stale: this._mappingList(who + 'active=true^state=expired', 'target', limit, '')
     };
     if (!ownerId) {
-      out.noOwner = this._mappingList('active=true^ownerISEMPTY', 'target', limit);
+      out.noOwner = this._mappingList('active=true^ownerISEMPTY', 'target', limit, '');
       out.uncovered = this.uncovered(limit);
     }
     return out;
   },
 
   // Role: one list of controls matching a query: the total number, and the first rows (up to "limit").
-  _mappingList: function(query, orderField, limit) {
+  _mappingList: function(query, orderField, limit, forceStatus) {
     var out = { count: this.count('x_1929776_compli_0_mapping', query), items: [] };
     var gr = new GlideRecord('x_1929776_compli_0_mapping');
     gr.addEncodedQuery(query);
@@ -140,13 +140,13 @@ CPMStats.prototype = {
     gr.setLimit(limit);
     gr.query();
     var today = this.util.today();
-    while (gr.next()) out.items.push(this._row(gr, today));
+    while (gr.next()) out.items.push(this._row(gr, today, forceStatus));
     return out;
   },
 
   // Role: turns a mapping into one row of a list. When the control has no owner, the row says why:
   //       the CI has no owner at all, or it has one and the control was not synchronised yet.
-  _row: function(gr, today) {
+  _row: function(gr, today, forceStatus) {
     var until = gr.getValue('valid_until') || '';
     var ownerId = gr.getValue('owner') || '';
     var ciHasOwner = !!((gr.target.owned_by + '') || (gr.target.managed_by + ''));
@@ -159,7 +159,7 @@ CPMStats.prototype = {
       target: gr.target.getDisplayValue(),
       ref: gr.control.reference + '',
       control: gr.control.name + '',
-      status: gr.getValue('state'),
+      status: forceStatus || gr.getValue('state'),
       owner: gr.getDisplayValue('owner'),
       ownerFlag: flag,
       until: until,
@@ -272,15 +272,53 @@ CPMStats.prototype = {
     }).sort(function(a, b) { return a.coverage - b.coverage; });
   },
 
+  // Role: the audit export for the compliance team: every approved or superseded proof, with who approved it,
+  //       the scope frozen at approval, the files, and whether the integrity seal still matches.
+  audit: function(limit) {
+    var rows = [];
+    if (!this.access.isAdmin()) return rows;
+    var review = new CPMReview();
+    var gr = new GlideRecord('x_1929776_compli_0_evidence');
+    gr.addQuery('status', 'IN', 'approved,superseded');
+    gr.orderByDesc('reviewed_on');
+    gr.setLimit(limit);
+    gr.query();
+    while (gr.next()) {
+      var names = [];
+      var att = new GlideSysAttachment().getAttachments('x_1929776_compli_0_evidence', gr.getUniqueValue());
+      while (att.next()) names.push(att.getValue('file_name'));
+      rows.push({
+        number: gr.getValue('number'),
+        target: gr.mapping.target.getDisplayValue(),
+        ref: gr.mapping.control.reference + '',
+        control: gr.mapping.control.name + '',
+        framework: gr.mapping.control.framework.getDisplayValue(),
+        status: gr.getDisplayValue('status'),
+        submittedBy: gr.getDisplayValue('submitted_by'),
+        submittedOn: gr.getValue('submitted_on') || '',
+        reviewedBy: gr.getDisplayValue('reviewed_by'),
+        reviewedOn: gr.getValue('reviewed_on') || '',
+        validUntil: gr.getValue('valid_until') || '',
+        scope: gr.getValue('scope_snapshot') || '',
+        files: names.join('; '),
+        integrity: review.verify(gr)
+      });
+    }
+    return rows;
+  },
+
   // ---------- One CI or service ----------
 
-  // Role: everything the page of one CI or service shows: its numbers, each control and the evidence history.
-  //       The compliance team sees every control of the page, an owner only the controls they own.
+  // Role: everything the page of one CI or service shows: its numbers, each control, the components it is made of,
+  //       and the evidence history. The compliance team sees every control of the page, an owner only their own.
   detail: function(targetId) {
     var ci = new GlideRecord('cmdb_ci');
     if (!ci.get(targetId)) return null;
 
     var seesAll = this.access.isAdmin();
+    var owned = {};
+    if (!seesAll) this.access.ownedTargetIds().forEach(function(id) { owned[id] = true; });
+
     var history = this._evidenceByMapping(targetId, seesAll);
     var horizon = this.util.horizon();
     var controls = [];
@@ -322,14 +360,78 @@ CPMStats.prototype = {
     });
 
     var counts = this._countByTarget([targetId]);
+    var composition = this._composition(targetId, seesAll, owned);
     return {
       id: targetId,
       name: ci.getValue('name'),
       kind: ci.getDisplayValue('sys_class_name'),
       owner: ci.getDisplayValue('owned_by') || ci.getDisplayValue('managed_by'),
       summary: this._finish(counts[targetId] || this._blank(targetId)),
+      components: composition.items,
+      rollup: composition.rollup,
+      partOf: this._partOf(targetId, seesAll, owned),
       controls: controls
     };
+  },
+
+  // Role: the CIs this service is made of (from the CMDB relationships), each with its own control coverage.
+  //       A user only sees the coverage of the components they own; for the others only the name and the type.
+  _composition: function(targetId, seesAll, owned) {
+    var out = { items: [], rollup: { components: 0, total: 0, approved: 0, coverage: 0, uncovered: 0 } };
+    var depthOf;
+    try {
+      depthOf = new CPMScope().componentsOf(targetId);
+    } catch (e) {
+      gs.warn('[CPM] components unavailable: ' + e.message);
+      return out;
+    }
+    var ids = Object.keys(depthOf);
+    if (!ids.length) return out;
+
+    var counted = this._countByTarget(ids);
+    var ci = new GlideRecord('cmdb_ci');
+    ci.addQuery('sys_id', 'IN', ids.join(','));
+    ci.orderBy('name');
+    ci.query();
+    while (ci.next()) {
+      var id = ci.getUniqueValue();
+      var visible = seesAll || !!owned[id];
+      var row = visible ? this._finish(counted[id] || this._blank(id)) : this._blank(id);
+      row.name = ci.getValue('name');
+      row.kind = ci.getDisplayValue('sys_class_name');
+      row.owner = ci.getDisplayValue('owned_by') || ci.getDisplayValue('managed_by');
+      row.depth = depthOf[id];
+      row.visible = visible;
+      row.canOpen = visible && (row.total || 0) > 0;
+      if (visible) {
+        out.rollup.total += row.total;
+        out.rollup.approved += row.approved;
+        if (!row.total) out.rollup.uncovered++;
+      }
+      out.items.push(row);
+    }
+    out.rollup.components = out.items.length;
+    out.rollup.coverage = out.rollup.total ? Math.round(out.rollup.approved / out.rollup.total * 100) : 0;
+    return out;
+  },
+
+  // Role: the services this CI is part of, because a control was applied to it "through" them. It explains why it is in scope.
+  _partOf: function(targetId, seesAll, owned) {
+    var out = [];
+    var seen = {};
+    var gr = new GlideRecord('x_1929776_compli_0_mapping');
+    gr.addQuery('target', targetId);
+    gr.addQuery('active', true);
+    gr.addNotNullQuery('via_service');
+    if (!seesAll) gr.addQuery('owner', this.access.userId);
+    gr.query();
+    while (gr.next()) {
+      var via = gr.getValue('via_service');
+      if (seen[via]) continue;
+      seen[via] = true;
+      out.push({ id: via, name: gr.getDisplayValue('via_service'), canOpen: seesAll || !!owned[via] });
+    }
+    return out;
   },
 
   // Role: explains why a control has no upload area, so the page never leaves the user guessing.
@@ -373,6 +475,8 @@ CPMStats.prototype = {
         on: gr.getValue('submitted_on') || '',
         reviewedBy: gr.getDisplayValue('reviewed_by'),
         until: gr.getValue('valid_until') || '',
+        scope: gr.getValue('scope_snapshot') || '',
+        sealed: !!gr.getValue('seal'),
         comment: gr.getValue('status') == 'rejected' ? (gr.getValue('review_comment') || '') : '',
         files: this._filesOf(gr.getUniqueValue())
       });
@@ -400,13 +504,13 @@ CPMStats.prototype = {
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2026-10-25 13:45:37</sys_created_on>
         <sys_id>a2cb501373c05310a621f2024ab8b7f0</sys_id>
-        <sys_mod_count>13</sys_mod_count>
+        <sys_mod_count>14</sys_mod_count>
         <sys_name>CPMStats</sys_name>
         <sys_package display_value="Compliance Posture Mapper" source="x_1929776_compli_0">f7756d0a738c9310a621f2024ab8b707</sys_package>
         <sys_policy>read</sys_policy>
         <sys_scope display_value="Compliance Posture Mapper">f7756d0a738c9310a621f2024ab8b707</sys_scope>
         <sys_update_name>sys_script_include_a2cb501373c05310a621f2024ab8b7f0</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
-        <sys_updated_on>2026-10-27 16:47:18</sys_updated_on>
+        <sys_updated_on>2026-10-27 23:51:16</sys_updated_on>
     </sys_script_include>
 </record_update>
