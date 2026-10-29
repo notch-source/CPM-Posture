@@ -31,5 +31,6 @@
             <choice/>
         </element>
         <element default="What the control requires" label="Description" max_length="1000" name="description" type="string"/>
+        <element label="Include components" max_length="255" name="include_components" type="boolean"/>
     </element>
 </database>

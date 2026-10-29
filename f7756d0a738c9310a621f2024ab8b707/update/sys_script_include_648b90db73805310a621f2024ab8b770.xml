@@ -9,10 +9,12 @@
         <mobile_callable>false</mobile_callable>
         <name>CPMReview</name>
         <sandbox_callable>false</sandbox_callable>
-        <script><![CDATA[// Role: the compliance team's decisions. Approving makes the proof count until its expiry date;
-//       rejecting sends the owner back with a reason. Both return '' on success, or an error message.
+        <script><![CDATA[// Role: the compliance team's decisions. Approving makes the proof count until its expiry date, freezes the scope
+//       and seals the record; rejecting sends the owner back with a reason. Both tell the owner by email.
+//       Both return '' on success, or an error message.
 var CPMReview = Class.create();
 CPMReview.prototype = {
+  APPROVED_EVENT: 'x_1929776_compli_0.evidence.approved',
   REJECTED_EVENT: 'x_1929776_compli_0.evidence.rejected',
 
   initialize: function() {
@@ -28,13 +30,19 @@ CPMReview.prototype = {
     var until = this.util.addDays(this.util.today(), days);
     this._supersedeOlder(loaded.mapping.getUniqueValue(), evidenceId);
 
-    loaded.evidence.setValue('status', 'approved');
-    loaded.evidence.setValue('valid_until', until);
-    this._stamp(loaded.evidence);
+    var evidence = loaded.evidence;
+    evidence.setValue('status', 'approved');
+    evidence.setValue('valid_until', until);
+    evidence.setValue('scope_snapshot', this._snapshot(loaded.mapping));   // what the service was made of today
+    this._stamp(evidence);
+    evidence.setValue('seal', this.seal(evidence));                         // detects any later change
+    evidence.update();
 
     loaded.mapping.setValue('state', 'approved');
     loaded.mapping.setValue('valid_until', until);
     loaded.mapping.update();
+
+    this._notify(this.APPROVED_EVENT, evidence, loaded.mapping);
     return '';
   },
 
@@ -45,9 +53,11 @@ CPMReview.prototype = {
     comment = (comment || '').trim();
     if (!comment) return 'Write a short reason before rejecting: the owner will read it.';
 
-    loaded.evidence.setValue('status', 'rejected');
-    loaded.evidence.setValue('review_comment', comment.substring(0, 500));
-    this._stamp(loaded.evidence);
+    var evidence = loaded.evidence;
+    evidence.setValue('status', 'rejected');
+    evidence.setValue('review_comment', comment.substring(0, 500));
+    this._stamp(evidence);
+    evidence.update();
 
     // A rejected first submission sends the control back to the owner. A rejected renewal does not:
     // the older approved proof keeps counting until it expires.
@@ -55,9 +65,51 @@ CPMReview.prototype = {
       loaded.mapping.setValue('state', 'rejected');
       loaded.mapping.update();
     }
-    var recipient = loaded.evidence.getValue('submitted_by') || loaded.mapping.getValue('owner');
-    if (recipient) gs.eventQueue(this.REJECTED_EVENT, loaded.evidence, recipient, '');
+    this._notify(this.REJECTED_EVENT, evidence, loaded.mapping);
     return '';
+  },
+
+  // Role: the integrity seal: a SHA-256 fingerprint of the facts of the approval and of every file.
+  //       The state is left out, so a later move to Superseded does not break it. Returns '' if hashing is unavailable.
+  seal: function(evidence) {
+    try {
+      var parts = [
+        evidence.getValue('number'), evidence.getValue('mapping'), evidence.getValue('valid_until'),
+        evidence.getValue('submitted_by'), evidence.getValue('submitted_on'),
+        evidence.getValue('reviewed_by'), evidence.getValue('reviewed_on'), evidence.getValue('scope_snapshot')
+      ];
+      var files = [];
+      var att = new GlideSysAttachment().getAttachments('x_1929776_compli_0_evidence', evidence.getUniqueValue());
+      while (att.next()) files.push(att.getValue('file_name') + ':' + att.getValue('size_bytes') + ':' + (att.getValue('hash') || ''));
+      files.sort();
+      return new GlideDigest().getSHA256Hex(parts.concat(files).join('|'));
+    } catch (e) {
+      gs.warn('[CPM] seal unavailable: ' + e.message);
+      return '';
+    }
+  },
+
+  // Role: compares the stored seal with a fresh one. Returns 'ok', 'changed', or 'none' when the record has no seal.
+  verify: function(evidence) {
+    var stored = evidence.getValue('seal');
+    if (!stored) return 'none';
+    return stored == this.seal(evidence) ? 'ok' : 'changed';
+  },
+
+  // Role: tells the person who submitted the evidence (or the owner of the control) about the decision.
+  _notify: function(eventName, evidence, mapping) {
+    var recipient = evidence.getValue('submitted_by') || mapping.getValue('owner');
+    if (recipient) gs.eventQueue(eventName, evidence, recipient, '');
+  },
+
+  // Role: the list of components of the CI today, frozen into the evidence. A failure here never blocks an approval.
+  _snapshot: function(mapping) {
+    try {
+      return new CPMScope().snapshot(mapping.getValue('target'));
+    } catch (e) {
+      gs.warn('[CPM] scope snapshot unavailable: ' + e.message);
+      return '';
+    }
   },
 
   // Role: loads the submission and its mapping, and refuses anything the reviewer must not do.
@@ -73,11 +125,10 @@ CPMReview.prototype = {
     return { evidence: evidence, mapping: mapping };
   },
 
-  // Role: records who decided and when.
+  // Role: records who decided and when. The caller saves the record.
   _stamp: function(evidence) {
     evidence.setValue('reviewed_by', gs.getUserID());
     evidence.setValue('reviewed_on', new GlideDateTime().getValue());
-    evidence.update();
   },
 
   // Role: when a new proof is approved, earlier approved proofs of the same control are marked Superseded.
@@ -99,13 +150,13 @@ CPMReview.prototype = {
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2026-10-25 13:44:09</sys_created_on>
         <sys_id>648b90db73805310a621f2024ab8b770</sys_id>
-        <sys_mod_count>5</sys_mod_count>
+        <sys_mod_count>6</sys_mod_count>
         <sys_name>CPMReview</sys_name>
         <sys_package display_value="Compliance Posture Mapper" source="x_1929776_compli_0">f7756d0a738c9310a621f2024ab8b707</sys_package>
         <sys_policy>read</sys_policy>
         <sys_scope display_value="Compliance Posture Mapper">f7756d0a738c9310a621f2024ab8b707</sys_scope>
         <sys_update_name>sys_script_include_648b90db73805310a621f2024ab8b770</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
-        <sys_updated_on>2026-10-27 16:47:02</sys_updated_on>
+        <sys_updated_on>2026-10-27 23:49:58</sys_updated_on>
     </sys_script_include>
 </record_update>

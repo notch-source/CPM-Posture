@@ -15,6 +15,7 @@
         <element label="Uploaded by" max_length="32" name="uploaded_by" reference="sys_user" type="reference"/>
         <element label="Attachements" max_length="40" name="attachements" type="string"/>
         <element label="Mapping" max_length="32" name="mapping" reference="x_1929776_compli_0_mapping" type="reference"/>
+        <element label="Seal" max_length="4000" name="seal" type="string"/>
         <element label="Title" mandatory="true" max_length="40" name="title" type="string"/>
         <element choice="1" label="State" max_length="255" name="state" read_only="true" read_only_option="strict_read_only" type="choice">
             <choice>
@@ -28,6 +29,7 @@
         <element label="Review comment" max_length="1000" name="review_comment" type="string"/>
         <element label="Collected on" max_length="255" name="collected_on" type="glide_date"/>
         <element attributes="edge_encryption_enabled=true" default="javascript:global.getNextObjNumberPadded();" label="Number" max_length="40" name="number" type="string"/>
+        <element label="Scope snapshot" max_length="4000" name="scope_snapshot" type="string"/>
         <element label="Submitted on" max_length="40" name="submitted_on" type="glide_date_time"/>
         <element choice="1" label="Soure" max_length="255" name="soure" type="choice">
             <choice>

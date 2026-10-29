@@ -13,6 +13,7 @@
                 <element inactive_on_update="false" label="Missing" sequence="0" value="missing"/>
             </choice>
         </element>
+        <element label="Via service" max_length="32" name="via_service" read_only="true" read_only_option="strict_read_only" reference="cmdb_ci" type="reference"/>
         <element label="Owner" max_length="32" name="owner" reference="sys_user" type="reference"/>
         <element attributes="edge_encryption_enabled=true" default="javascript:global.getNextObjNumberPadded();" label="Number" max_length="40" name="number" type="string"/>
         <index name="index">
@@ -23,6 +24,9 @@
         </index>
         <index name="index3">
             <element name="target"/>
+        </index>
+        <index name="index4">
+            <element name="via_service"/>
         </index>
     </element>
 </database>
