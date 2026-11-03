@@ -1,0 +1,137 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_1929776_compli_0.CPMMsg</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description/>
+        <mobile_callable>false</mobile_callable>
+        <name>CPMMsg</name>
+        <sandbox_callable>false</sandbox_callable>
+        <script><![CDATA[var CPMMsg = Class.create();
+CPMMsg.prototype = {
+  DEFAULTS: {
+    'cpm.err.generic': 'Something went wrong and nothing was changed. Please try again, or contact the compliance team.',
+    'cpm.err.unexpected': 'Something went wrong. Please try again, or contact the compliance team.',
+    'cpm.err.no_access': 'You do not have access to this page.',
+    'cpm.err.not_found': 'Not found.',
+    'cpm.err.control_not_found': 'This control was not found.',
+    'cpm.err.owner_only': 'Only the owner of this control can upload evidence for it.',
+    'cpm.err.not_accepting': 'This control cannot accept evidence right now.',
+    'cpm.err.pending_exists': 'A submission is already waiting for review.',
+    'cpm.err.file_name_missing': 'The file name is missing.',
+    'cpm.err.file_type': 'Only images (PNG, JPG, GIF, WEBP) and PDF files are accepted.',
+    'cpm.err.file_ext': 'This file extension is not allowed.',
+    'cpm.err.file_empty': 'The file is empty.',
+    'cpm.err.file_mismatch': 'The content of the file does not match its type.',
+    'cpm.err.file_size': 'The file is larger than {0} MB.',
+    'cpm.err.too_many_files': 'A submission can hold up to {0} files.',
+    'cpm.err.file_save': 'The file could not be saved.',
+    'cpm.err.no_files': 'Add at least one file before submitting.',
+    'cpm.err.file_unavailable': 'This file is not available.',
+    'cpm.err.file_forbidden': 'You cannot open this file.',
+    'cpm.err.file_not_found': 'File not found.',
+    'cpm.err.admin_only': 'Only the compliance team can review evidence.',
+    'cpm.err.not_pending': 'This evidence is no longer waiting for review.',
+    'cpm.err.self_review': 'You cannot review evidence that you submitted yourself.',
+    'cpm.err.mapping_gone': 'The control assignment no longer exists.',
+    'cpm.err.reason_required': 'Write a short reason before rejecting: the owner will read it.',
+    'cpm.err.changed': 'This submission was changed while you were reviewing it. Please reload the page and try again.',
+    'cpm.err.decision_failed': 'The decision could not be recorded. Please try again. If it keeps failing, ask the platform team to look at the "[CPM]" lines of the system log.',
+    'cpm.err.targets_too_long': 'The Targets list is {0} characters long, but the field can only store {1}. Increase "Max length" of the Targets field to 4000, or split this control in two.',
+    'cpm.err.targets_incomplete': 'The Targets list contains an incomplete entry ({0}). Remove it and select the target again.',
+    'cpm.ok.file_received': 'File received.',
+    'cpm.ok.submitted': 'Submitted for review.',
+    'cpm.ok.approved': 'Evidence approved: the owner has been notified.',
+    'cpm.ok.rejected': 'Evidence rejected: the owner has been notified.',
+    'cpm.ok.synced': 'Refreshed: {0} owner(s) updated.',
+    'cpm.why.only_owner': 'Only {0} can upload evidence for this control.',
+    'cpm.why.no_owner': 'This control has no owner yet, so nobody can upload evidence. Set an owner on the service or CI in the CMDB.',
+    'cpm.why.renew_from': 'Approved until {0}. You can send a renewal from {1}.',
+    'cpm.why.state': 'Evidence cannot be added in the current state ({0}).',
+    'cpm.flag.ci_not_synced': 'The CI has an owner, but this control was not synchronised yet. Use "Refresh now".',
+    'cpm.flag.no_owner_ci': 'No owner on the service or CI. Set "Owned by" in the CMDB.',
+    'cpm.flag.fallback': 'No owner in the CMDB. {0} is covering until one is set.',
+    'cpm.flag.no_owner_service': 'No owner on the service. Set "Owned by" in the CMDB.',
+    'cpm.mail.approved.title': 'Evidence approved. Thank you!',
+    'cpm.mail.approved.review_by': 'Reviewed by {0}',
+    'cpm.mail.approved.valid_until': 'Valid until {0}.',
+    'cpm.mail.approved.renew_from': 'You can send a renewal from {0}.',
+    'cpm.mail.approved.link': 'Open the page',
+    'cpm.mail.rejected.title': 'Evidence insufficient, please re-upload.',
+    'cpm.mail.rejected.comment': 'Reviewer comment: {0}',
+    'cpm.mail.rejected.link': 'Open the page and upload new evidence',
+    'cpm.mail.submitted.title': 'New evidence is waiting for review.',
+    'cpm.mail.submitted.by': 'Submitted by {0}',
+    'cpm.mail.submitted.link': 'Open the review inbox',
+    'cpm.mail.digest.link': 'Open your compliance dashboard',
+    'cpm.mail.section.new': 'New controls assigned to you',
+    'cpm.mail.section.expiring': 'Evidence expiring soon',
+    'cpm.mail.section.expired': 'Evidence that has just expired',
+    'cpm.mail.section.open': 'Still open',
+    'cpm.mail.col.target': 'Service or CI',
+    'cpm.mail.col.control': 'Control',
+    'cpm.mail.col.status': 'Status',
+    'cpm.mail.col.valid_until': 'Valid until',
+	'cpm.mail.assigned.title': 'New controls were assigned to you.',
+    'cpm.mail.team.title': 'Controls that nobody can be told about.',
+    'cpm.mail.team.no_owner': 'Controls with no owner',
+    'cpm.mail.team.inactive': 'Controls whose owner is inactive',
+    'cpm.mail.team.no_email': 'Controls whose owner has no email address',
+    'cpm.mail.team.fallback': 'Controls covered by the fallback owner (no owner in the CMDB)',
+    'cpm.mail.team.link': 'Open the follow-up lists',
+	'cpm.err.reviewer_unsaved': 'The decision was recorded, but the reviewer could not be saved on the evidence. Ask the platform team to check the "Reviewed by" field.'
+  },
+
+  initialize: function() {},
+
+  // message for a key: UI Message if it exists, else the English default. {0}, {1}... are replaced by args.
+  get: function(key, args) {
+    var text = gs.getMessage(key, args || []);
+    if (!text || text === key) text = this._fill(this.DEFAULTS[key] || key, args);
+    return text;
+  },
+
+  // optional, run once: creates the UI Message records so they can be translated
+  seedMessages: function() {
+    var created = 0;
+    for (var key in this.DEFAULTS) {
+      var existing = new GlideRecord('sys_ui_message');
+      existing.addQuery('key', key);
+      existing.addQuery('language', 'en');
+      existing.query();
+      if (existing.next()) continue;
+      var record = new GlideRecord('sys_ui_message');
+      record.initialize();
+      record.setValue('key', key);
+      record.setValue('message', this.DEFAULTS[key]);
+      record.setValue('language', 'en');
+      record.insert();
+      created++;
+    }
+    return created;
+  },
+
+  _fill: function(text, args) {
+    return text.replace(/\{(\d+)\}/g, function(whole, index) {
+      return (args && args[index] !== undefined) ? args[index] : '';
+    });
+  },
+
+  type: 'CPMMsg'
+};]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-10-29 15:59:51</sys_created_on>
+        <sys_id>b0d0a5a87318db10a621f2024ab8b7ad</sys_id>
+        <sys_mod_count>8</sys_mod_count>
+        <sys_name>CPMMsg</sys_name>
+        <sys_package display_value="Compliance Posture Mapper" source="x_1929776_compli_0">f7756d0a738c9310a621f2024ab8b707</sys_package>
+        <sys_policy>read</sys_policy>
+        <sys_scope display_value="Compliance Posture Mapper">f7756d0a738c9310a621f2024ab8b707</sys_scope>
+        <sys_update_name>sys_script_include_b0d0a5a87318db10a621f2024ab8b7ad</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-11-03 00:07:13</sys_updated_on>
+    </sys_script_include>
+</record_update>

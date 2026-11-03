@@ -9,17 +9,17 @@
         <mobile_callable>false</mobile_callable>
         <name>CPMScope</name>
         <sandbox_callable>false</sandbox_callable>
-        <script><![CDATA[// Role: answers "which CIs make up this service?" by following the CMDB relationships downwards
-//       (Business Service -> Application Service -> servers, databases, DNS...).
-//       The relationships live in the table cmdb_rel_ci. This class only reads them.
-var CPMScope = Class.create();
+        <script><![CDATA[var CPMScope = Class.create();
 CPMScope.prototype = {
-  MAX_DEPTH: 3,     // how many levels of relationships are followed
-  MAX_ITEMS: 100,   // safety limit for very large services
+  MAX_DEPTH: 3,    // relationship levels followed
+  MAX_ITEMS: 100,  // safety limit
 
-  initialize: function() {},
+  initialize: function() {
+    this.K = new CPMConst();
+    this.T = this.K.TABLE;
+  },
 
-  // Role: the components of a CI as { componentId: depth }. depth 1 = directly related, 2 = related to those, and so on.
+  // components of a CI as { id: depth }
   componentsOf: function(rootId) {
     var found = {};
     var seen = {};
@@ -29,7 +29,7 @@ CPMScope.prototype = {
 
     for (var depth = 1; depth <= this.MAX_DEPTH && level.length; depth++) {
       var next = [];
-      var rel = new GlideRecord('cmdb_rel_ci');
+      var rel = new GlideRecord(this.T.RELATION);
       rel.addQuery('parent', 'IN', level.join(','));
       rel.query();
       while (rel.next()) {
@@ -45,18 +45,17 @@ CPMScope.prototype = {
     return found;
   },
 
-  // Role: one sentence listing the components of a CI today. It is frozen into the evidence when it is approved,
-  //       so the audit trail still shows what the service was made of on that day, even if the CMDB changes later.
+  // one sentence listing the components today, frozen into the evidence at approval
   snapshot: function(rootId) {
     var ids = Object.keys(this.componentsOf(rootId));
     if (!ids.length) return 'No component was related to this CI in the CMDB at the time of approval.';
 
     var parts = [];
-    var ci = new GlideRecord('cmdb_ci');
+    var ci = new GlideRecord(this.T.CI);
     ci.addQuery('sys_id', 'IN', ids.join(','));
     ci.orderBy('name');
     ci.query();
-    while (ci.next()) parts.push(ci.getValue('name') + ' (' + ci.getDisplayValue('sys_class_name') + ')');
+    while (ci.next()) parts.push(ci.getDisplayValue() + ' (' + ci.getDisplayValue('sys_class_name') + ')');
 
     var text = 'Components at approval (' + parts.length + '): ' + parts.join(', ');
     return text.length > 3900 ? text.substring(0, 3897) + '...' : text;
@@ -68,13 +67,13 @@ CPMScope.prototype = {
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2026-10-27 23:48:11</sys_created_on>
         <sys_id>c2e878c07354d710a621f2024ab8b7b3</sys_id>
-        <sys_mod_count>0</sys_mod_count>
+        <sys_mod_count>5</sys_mod_count>
         <sys_name>CPMScope</sys_name>
         <sys_package display_value="Compliance Posture Mapper" source="x_1929776_compli_0">f7756d0a738c9310a621f2024ab8b707</sys_package>
         <sys_policy>read</sys_policy>
         <sys_scope display_value="Compliance Posture Mapper">f7756d0a738c9310a621f2024ab8b707</sys_scope>
         <sys_update_name>sys_script_include_c2e878c07354d710a621f2024ab8b7b3</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
-        <sys_updated_on>2026-10-27 23:48:11</sys_updated_on>
+        <sys_updated_on>2026-10-31 10:06:18</sys_updated_on>
     </sys_script_include>
 </record_update>

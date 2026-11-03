@@ -9,22 +9,23 @@
         <mobile_callable>false</mobile_callable>
         <name>CPMNotify</name>
         <sandbox_callable>false</sandbox_callable>
-        <script><![CDATA[// Role: builds the emails. Nightly it queues one reminder per owner; the text itself is built when the
-//       email is sent, so events only carry a recipient and a date.
-var CPMNotify = Class.create();
+        <script><![CDATA[var CPMNotify = Class.create();
 CPMNotify.prototype = {
-  DIGEST_EVENT: 'x_1929776_compli_0.owner.digest',
-
   initialize: function() {
+    this.K = new CPMConst();
+    this.T = this.K.TABLE;
+    this.S = this.K.STATE;
     this.util = new CPMUtil();
+    this.msg = new CPMMsg();
   },
 
-  // Role: nightly entry point. Queues one reminder event for each owner who has something to act on.
+// nightly: one reminder per owner who can be emailed, then one alert for the team about the rest
   run: function() {
     var day = this.util.today();
     var owners = {};
+    var self = this;
     this._sections(day).forEach(function(section) {
-      var ga = new GlideAggregate('x_1929776_compli_0_mapping');
+      var ga = new GlideAggregate(self.T.MAPPING);
       ga.addEncodedQuery(section.query);
       ga.addNotNullQuery('owner');
       ga.addAggregate('COUNT');
@@ -32,95 +33,187 @@ CPMNotify.prototype = {
       ga.query();
       while (ga.next()) owners[ga.getValue('owner')] = true;
     });
+    var sent = 0;
     Object.keys(owners).forEach(function(ownerId) {
-      var user = new GlideRecord('sys_user');
-      if (user.get(ownerId)) gs.eventQueue(this.DIGEST_EVENT, user, ownerId, day);
-    }, this);
+      try {
+        var user = new GlideRecord(self.T.USER);
+        if (!user.get(ownerId) || !self._canEmail(user)) return;   // the team alert covers these owners
+        gs.eventQueue(self.K.EVENT.DIGEST, user, ownerId, day);
+        sent++;
+      } catch (e) {
+        gs.error('[CPM] reminder for owner ' + ownerId + ' failed: ' + e.message);
+      }
+    });
+    return sent + ' owner reminder(s), ' + this._alertTeam(day) + ' team alert(s)';
   },
 
-  // Role: defines what a reminder can contain: a title and a query on mappings per section.
-  //       No "already notified" flags are needed, because every section depends on a date.
-  _sections: function(day) {
-    var soon = [this.util.intProp('warning_days', 30), 7, 1]
-      .map(function(n) { return this.util.addDays(day, n); }, this).join(',');
-    var yesterday = this.util.addDays(day, -1);
+  // can this user receive an email? Active and with an address
+  _canEmail: function(user) {
+    return this.util.on(user.getValue('active')) && !!user.getValue('email');
+  },
+
+  // the cases where nobody can be told: a title and a query per case
+  _teamSections: function() {
+    var fallback = this.util.prop('fallback_owner', '');
     var sections = [
-      { title: 'New controls assigned to you', query: 'active=true^state=missing^sys_created_on>=' + yesterday + ' 00:00:00' },
-      { title: 'Evidence expiring soon', query: 'active=true^state=approved^valid_untilIN' + soon },
-      { title: 'Evidence that expired yesterday', query: 'active=true^state=expired^valid_until=' + yesterday }
+      { title: this.msg.get('cpm.mail.team.no_owner'), query: 'active=true^ownerISEMPTY' },
+      { title: this.msg.get('cpm.mail.team.inactive'), query: 'active=true^owner.active=false' },
+      { title: this.msg.get('cpm.mail.team.no_email'), query: 'active=true^owner.active=true^owner.emailISEMPTY' }
     ];
-    // Every Monday the whole list of open items is repeated.
-    if (new GlideDateTime(day + ' 00:00:00').getDayOfWeekUTC() == 1)
-      sections.push({ title: 'Still open', query: 'active=true^stateINmissing,rejected,expired' });
+    if (fallback) sections.push({ title: this.msg.get('cpm.mail.team.fallback'),
+      query: 'active=true^owner=' + fallback + '^target.owned_byISEMPTY^target.managed_byISEMPTY' });
     return sections;
   },
 
-  // Role: the body of an owner's reminder: one table per non-empty section.
-  ownerDigest: function(ownerId, day) {
-    var html = '';
-    this._sections(day).forEach(function(section) {
-      html += this._table(section.title, this._rows(section.query + '^owner=' + ownerId));
-    }, this);
-    return html + this._link('Open your compliance dashboard');
+  // queues one alert per compliance team member, only when there is something to report
+  _alertTeam: function(day) {
+    var self = this;
+    var any = this._teamSections().some(function(s) { return self._count(s.query) > 0; });
+    if (!any) return 0;
+    var sent = 0;
+    this._teamIds().forEach(function(id) {
+      var user = new GlideRecord(self.T.USER);
+      if (user.get(id) && self._canEmail(user)) { gs.eventQueue(self.K.EVENT.TEAM, user, id, day); sent++; }
+    });
+    if (!sent) gs.warn('[CPM] some controls have no reachable owner, and nobody in the compliance team can be emailed.');
+    return sent;
   },
 
-  // Role: the body of the email sent when the team APPROVES a submission.
+  // compliance team: members of the "admin_group" group when set, else the holders of the admin role
+  _teamIds: function() {
+    var ids = {};
+    var group = this.util.prop('admin_group', '');
+    var gr = new GlideRecord(group ? 'sys_user_grmember' : 'sys_user_has_role');
+    if (group) {
+      var q = gr.addQuery('group.name', group);
+      q.addOrCondition('group', group);
+    } else {
+      gr.addQuery('role.name', this.K.ROLE.ADMIN);
+    }
+    gr.query();
+    while (gr.next()) ids[gr.getValue('user')] = true;
+    return Object.keys(ids);
+  },
+
+  _count: function(query) {
+    var ga = new GlideAggregate(this.T.MAPPING);
+    ga.addEncodedQuery(query);
+    ga.addAggregate('COUNT');
+    ga.query();
+    return ga.next() ? parseInt(ga.getAggregate('COUNT'), 10) : 0;
+  },
+
+
+  // what a reminder can contain: a title and a query per section
+  _sections: function(day) {
+    var self = this;
+    var S = this.S;
+    var soon = [this.util.intProp('warning_days', 30), 7, 1]
+      .map(function(n) { return self.util.addDays(day, n); }).join(',');
+    var yesterday = this.util.addDays(day, -1);
+    var sections = [
+      { title: this.msg.get('cpm.mail.section.new'), query: 'active=true^state=' + S.MISSING + '^sys_created_on>=' + yesterday + ' 00:00:00' },
+      { title: this.msg.get('cpm.mail.section.expiring'), query: 'active=true^state=' + S.APPROVED + '^valid_untilIN' + soon },
+      { title: this.msg.get('cpm.mail.section.expired'), query: 'active=true^state=' + S.EXPIRED + '^valid_until=' + yesterday }
+    ];
+    // every Monday: the whole open list
+    if (new GlideDateTime(day + ' 00:00:00').getDayOfWeekUTC() == 1)
+      sections.push({ title: this.msg.get('cpm.mail.section.open'), query: 'active=true^stateIN' + this.K.list(S.MISSING, S.REJECTED, S.EXPIRED) });
+    return sections;
+  },
+
+  // body of an owner's reminder
+  ownerDigest: function(ownerId, day) {
+    var self = this;
+    var html = '';
+    this._sections(day).forEach(function(section) {
+      html += self._table(section.title, self._rows(section.query + '^owner=' + ownerId));
+    });
+    return html + this._link(this.msg.get('cpm.mail.digest.link'));
+  },
+
+  // body of the approval email
   approval: function(evidence) {
     var until = evidence.getValue('valid_until') || '';
     var renewFrom = until ? this.util.addDays(until, -this.util.intProp('warning_days', 30)) : '';
-    return '<p><b>Evidence approved. Thank you!</b></p>' +
+    return '<p><b>' + this._esc(this.msg.get('cpm.mail.approved.title')) + '</b></p>' +
       '<p>' + this._esc(evidence.mapping.target.getDisplayValue()) + ' · ' + this._esc(evidence.mapping.control.name + '') + '<br>' +
-      'Reviewed by ' + this._esc(evidence.getDisplayValue('reviewed_by')) +
-      (until ? '<br>Valid until ' + this._esc(until) + '.' : '') +
-      (renewFrom ? ' You can send a renewal from ' + this._esc(renewFrom) + '.' : '') + '</p>' +
-      this._link('Open the page', evidence.mapping.target + '');
+      this._esc(this.msg.get('cpm.mail.approved.review_by', [evidence.getDisplayValue('review_by')])) +
+      (until ? '<br>' + this._esc(this.msg.get('cpm.mail.approved.valid_until', [until])) : '') +
+      (renewFrom ? ' ' + this._esc(this.msg.get('cpm.mail.approved.renew_from', [renewFrom])) : '') + '</p>' +
+      this._link(this.msg.get('cpm.mail.approved.link'), evidence.mapping.target + '');
   },
 
-  // Role: the body of the email sent when the team REJECTS a submission.
+  // body of the rejection email
   rejection: function(evidence) {
-    return '<p><b>Evidence insufficient, please re-upload.</b></p>' +
+    return '<p><b>' + this._esc(this.msg.get('cpm.mail.rejected.title')) + '</b></p>' +
       '<p>' + this._esc(evidence.mapping.target.getDisplayValue()) + ' · ' + this._esc(evidence.mapping.control.name + '') + '<br>' +
-      'Reviewer comment: ' + this._esc(evidence.getValue('review_comment')) + '</p>' +
-      this._link('Open the page and upload new evidence', evidence.mapping.target + '');
+      this._esc(this.msg.get('cpm.mail.rejected.comment', [evidence.getValue('review_comment')])) + '</p>' +
+      this._link(this.msg.get('cpm.mail.rejected.link'), evidence.mapping.target + '');
   },
 
-  // Role: the body of the email sent to the compliance team when an owner submits evidence.
+  // body of the email to the team when evidence is submitted
   submitted: function(evidence) {
-    return '<p>New evidence is waiting for review.</p>' +
+    return '<p>' + this._esc(this.msg.get('cpm.mail.submitted.title')) + '</p>' +
       '<p>' + this._esc(evidence.mapping.target.getDisplayValue()) + ' · ' + this._esc(evidence.mapping.control.name + '') + '<br>' +
-      'Submitted by ' + this._esc(evidence.getDisplayValue('submitted_by')) + '</p>' +
-      this._link('Open the review inbox');
+      this._esc(this.msg.get('cpm.mail.submitted.by', [evidence.getDisplayValue('submitted_by')])) + '</p>' +
+      this._link(this.msg.get('cpm.mail.submitted.link'));
   },
 
-  // Role: lists the mappings that match a query, as simple rows.
+   // body of the team alert
+  teamDigest: function() {
+    var self = this;
+    var html = '<p><b>' + this._esc(this.msg.get('cpm.mail.team.title')) + '</b></p>';
+    this._teamSections().forEach(function(s) { html += self._table(s.title, self._rows(s.query)); });
+    return html + this._link(this.msg.get('cpm.mail.team.link'));
+  },
+
+  // body of the email sent to an owner when controls are assigned to them
+  assigned: function(control, ownerId) {
+    var rows = this._rows('active=true^control=' + control.getUniqueValue() + '^owner=' + ownerId + '^state=' + this.S.MISSING);
+    return '<p><b>' + this._esc(this.msg.get('cpm.mail.assigned.title')) + '</b></p><p>' + this._esc(control.getValue('name')) + '</p>' +
+      this._table(this.msg.get('cpm.mail.section.new'), rows) + this._link(this.msg.get('cpm.mail.digest.link'));
+  },
+
+  // up to 50 mappings matching a query, with names
   _rows: function(query) {
-    var rows = [];
-    var gr = new GlideRecord('x_1929776_compli_0_mapping');
+    var raw = [];
+    var gr = new GlideRecord(this.T.MAPPING);
     gr.addEncodedQuery(query);
     gr.orderBy('target');
     gr.setLimit(50);
     gr.query();
     while (gr.next()) {
-      rows.push({ target: gr.getDisplayValue('target'), control: gr.control.name + '', state: gr.getDisplayValue('state'), until: gr.getValue('valid_until') || '' });
+      raw.push({ targetId: gr.getValue('target'), control: gr.getValue('control'), state: gr.getDisplayValue('state'), until: gr.getValue('valid_until') || '' });
     }
-    return rows;
+    var lookup = new CPMLookup();
+    var targets = lookup.names(this.T.CI, raw.map(function(r) { return r.targetId; }));
+    var controls = lookup.names(this.T.CONTROL, raw.map(function(r) { return r.control; }));
+    return raw.map(function(r) {
+      return { targetId: r.targetId, target: targets[r.targetId] || '', control: controls[r.control] || '', state: r.state, until: r.until };
+    });
   },
 
-  // Role: draws a titled HTML table, or nothing when there are no rows.
+  // a titled HTML table (nothing when empty); each service name links to its page
   _table: function(title, rows) {
     if (!rows.length) return '';
-    var html = '<p><b>' + this._esc(title) + '</b></p><table cellpadding="6" style="border-collapse:collapse">' +
-      '<tr><th align="left">Service or CI</th><th align="left">Control</th><th align="left">Status</th><th align="left">Valid until</th></tr>';
+    var self = this;
+    var th = function(key) { return '<th align="left">' + self._esc(self.msg.get(key)) + '</th>'; };
+    var html = '<p><b>' + this._esc(title) + '</b></p><table cellpadding="6" style="border-collapse:collapse"><tr>' +
+      th('cpm.mail.col.target') + th('cpm.mail.col.control') + th('cpm.mail.col.status') + th('cpm.mail.col.valid_until') + '</tr>';
     rows.forEach(function(r) {
-      html += '<tr><td>' + this._esc(r.target) + '</td><td>' + this._esc(r.control) + '</td><td>' + this._esc(r.state) +
-              '</td><td>' + this._esc(r.until) + '</td></tr>';
-    }, this);
+      html += '<tr><td><a href="' + self._url(r.targetId) + '">' + self._esc(r.target) + '</a></td><td>' + self._esc(r.control) +
+              '</td><td>' + self._esc(r.state) + '</td><td>' + self._esc(r.until) + '</td></tr>';
+    });
     return html + '</table>';
   },
 
-  // Role: a link to the portal, optionally to the page of one CI or service.
+  _url: function(targetId) {
+    return gs.getProperty('glide.servlet.uri') + 'sp?id=cpm' + (targetId ? '&target=' + targetId : '');
+  },
+
   _link: function(text, targetId) {
-    return '<p><a href="' + gs.getProperty('glide.servlet.uri') + 'sp?id=cpm' + (targetId ? '&target=' + targetId : '') + '">' + text + '</a></p>';
+    return '<p><a href="' + this._url(targetId) + '">' + this._esc(text) + '</a></p>';
   },
 
   _esc: function(text) {
@@ -133,13 +226,13 @@ CPMNotify.prototype = {
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2026-10-24 11:51:18</sys_created_on>
         <sys_id>3a08babe73001310a621f2024ab8b7d3</sys_id>
-        <sys_mod_count>6</sys_mod_count>
+        <sys_mod_count>14</sys_mod_count>
         <sys_name>CPMNotify</sys_name>
         <sys_package display_value="Compliance Posture Mapper" source="x_1929776_compli_0">f7756d0a738c9310a621f2024ab8b707</sys_package>
         <sys_policy>read</sys_policy>
         <sys_scope display_value="Compliance Posture Mapper">f7756d0a738c9310a621f2024ab8b707</sys_scope>
         <sys_update_name>sys_script_include_3a08babe73001310a621f2024ab8b7d3</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
-        <sys_updated_on>2026-10-27 23:50:34</sys_updated_on>
+        <sys_updated_on>2026-11-03 00:07:44</sys_updated_on>
     </sys_script_include>
 </record_update>
