@@ -23,7 +23,7 @@ CPMMapping.prototype = {
 
   // makes the mappings of one control match its Targets (new = Missing, removed = deactivated).
   // Each owner who received new mappings gets one email
-  syncControl: function(control) {
+  syncControl: function(control, silent) {
     var wanted = this._wanted(control);
     var existing = this._existing(control);
     var controlId = control.getUniqueValue();
@@ -43,6 +43,7 @@ CPMMapping.prototype = {
     for (var other in existing) {
       if (!(other in wanted) && existing[other].active) this._update(existing[other].id, false, null);
     }
+    if (silent) return;   // the self-test sends no email
     Object.keys(fresh).forEach(function(ownerId) { gs.eventQueue(this.K.EVENT.ASSIGNED, control, ownerId, ''); }, this);
   },
 
@@ -303,7 +304,7 @@ CPMMapping.prototype = {
     mapping.setValue('via_service', want.via);
     mapping.setValue('state', this.S.MISSING);
     mapping.setValue('active', true);
-    mapping.insert();
+    if (!mapping.insert()) gs.warn('[CPM] mapping not created for CI ' + targetId + ' on control ' + controlId + ' (duplicate, or refused by a rule).');
   },
 
   _update: function(mappingId, active, want) {
@@ -323,13 +324,13 @@ CPMMapping.prototype = {
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2026-10-25 13:43:00</sys_created_on>
         <sys_id>2a3b10df73805310a621f2024ab8b76f</sys_id>
-        <sys_mod_count>13</sys_mod_count>
+        <sys_mod_count>14</sys_mod_count>
         <sys_name>CPMMapping</sys_name>
         <sys_package display_value="Compliance Posture Mapper" source="x_1929776_compli_0">f7756d0a738c9310a621f2024ab8b707</sys_package>
         <sys_policy>read</sys_policy>
         <sys_scope display_value="Compliance Posture Mapper">f7756d0a738c9310a621f2024ab8b707</sys_scope>
         <sys_update_name>sys_script_include_2a3b10df73805310a621f2024ab8b76f</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
-        <sys_updated_on>2026-11-02 18:42:39</sys_updated_on>
+        <sys_updated_on>2026-11-04 09:17:15</sys_updated_on>
     </sys_script_include>
 </record_update>

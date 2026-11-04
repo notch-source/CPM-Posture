@@ -73,7 +73,8 @@ CPMUtil.prototype = {
     return ci.getValue('owned_by') || ci.getValue('managed_by') || this.prop('fallback_owner', '');
   },
 
-  // setup problems, shown to the compliance team: a missing field, or a Script Include that is not up to date
+  // setup problems, shown to the compliance team: a missing field, a Script Include that is not up to date,
+  // or a nightly job that did not run
   healthProblems: function() {
     var T = this.K.TABLE;
     var problems = [];
@@ -108,6 +109,16 @@ CPMUtil.prototype = {
         problems.push(need[0] + ' is missing or broken: ' + e.message);
       }
     });
+
+    // the nightly job brings states up to date: approved controls long past their end date mean it did not run
+    var late = new GlideAggregate(T.MAPPING);
+    late.addQuery('active', true);
+    late.addQuery('state', this.K.STATE.APPROVED);
+    late.addQuery('valid_until', '<', this.addDays(this.today(), -1));
+    late.addAggregate('COUNT');
+    late.query();
+    var stale = late.next() ? parseInt(late.getAggregate('COUNT'), 10) : 0;
+    if (stale) problems.push(stale + ' control(s) are still marked approved after their end date: the nightly job did not run or failed. Check the scheduled job and System Log > All for "[CPM]".');
     return problems;
   },
 
@@ -117,13 +128,13 @@ CPMUtil.prototype = {
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2026-10-21 22:48:43</sys_created_on>
         <sys_id>0641b5467300d310a621f2024ab8b746</sys_id>
-        <sys_mod_count>22</sys_mod_count>
+        <sys_mod_count>24</sys_mod_count>
         <sys_name>CPMUtil</sys_name>
         <sys_package display_value="Compliance Posture Mapper" source="x_1929776_compli_0">f7756d0a738c9310a621f2024ab8b707</sys_package>
         <sys_policy>read</sys_policy>
         <sys_scope display_value="Compliance Posture Mapper">f7756d0a738c9310a621f2024ab8b707</sys_scope>
         <sys_update_name>sys_script_include_0641b5467300d310a621f2024ab8b746</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
-        <sys_updated_on>2026-11-03 00:04:00</sys_updated_on>
+        <sys_updated_on>2026-11-04 10:18:55</sys_updated_on>
     </sys_script_include>
 </record_update>

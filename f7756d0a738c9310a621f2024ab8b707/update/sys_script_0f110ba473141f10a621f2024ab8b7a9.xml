@@ -30,9 +30,8 @@
         <rest_service_text/>
         <rest_variables/>
         <role_conditions/>
-        <script><![CDATA[// Role: before a Control is saved: refuses a Targets list that the field cannot store completely (the database would
-//       cut it without warning), then writes the names of the selected targets in a read-only field under the picker.
-(function executeRule(current, previous) {
+        <script><![CDATA[(function executeRule(current, previous) {
+  var SUMMARY_FIELD = 'targets_summary';   
   var mapping = new CPMMapping();
   var problem = mapping.targetsProblem(current);
   if (problem) {
@@ -40,7 +39,11 @@
     current.setAbortAction(true);
     return;
   }
-  current.setValue('targets_summary', mapping.describeTargets(current));
+  try {
+    current.setValue(SUMMARY_FIELD, mapping.describeTargets(current));
+  } catch (e) {
+    gs.error('[CPM] targets summary failed: ' + e.message);
+  }
 })(current, previous);]]></script>
         <sys_class_name>sys_script</sys_class_name>
         <sys_created_by>admin</sys_created_by>
@@ -48,7 +51,7 @@
         <sys_domain>global</sys_domain>
         <sys_domain_path>/</sys_domain_path>
         <sys_id>0f110ba473141f10a621f2024ab8b7a9</sys_id>
-        <sys_mod_count>3</sys_mod_count>
+        <sys_mod_count>4</sys_mod_count>
         <sys_name>CPM control summary</sys_name>
         <sys_overrides/>
         <sys_package display_value="Compliance Posture Mapper" source="x_1929776_compli_0">f7756d0a738c9310a621f2024ab8b707</sys_package>
@@ -56,7 +59,7 @@
         <sys_scope display_value="Compliance Posture Mapper">f7756d0a738c9310a621f2024ab8b707</sys_scope>
         <sys_update_name>sys_script_0f110ba473141f10a621f2024ab8b7a9</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
-        <sys_updated_on>2026-11-03 10:25:19</sys_updated_on>
+        <sys_updated_on>2026-11-04 10:13:00</sys_updated_on>
         <template/>
         <when>before</when>
     </sys_script>

@@ -5,7 +5,7 @@
         <action_delete>true</action_delete>
         <action_insert>false</action_insert>
         <action_query>false</action_query>
-        <action_update>false</action_update>
+        <action_update>true</action_update>
         <active>true</active>
         <add_message>false</add_message>
         <advanced>true</advanced>
@@ -28,7 +28,35 @@
         <rest_variables/>
         <role_conditions/>
         <script><![CDATA[(function executeRule(current, previous) {
-  new CPMMapping().refreshState(current.getValue('mapping'));
+  // only drafts can be deleted
+  if (current.operation() == 'delete') {
+    if (current.getValue('status') != 'draft') {
+      gs.addErrorMessage('Only drafts can be deleted.');
+      current.setAbortAction(true);
+    }
+    return;
+  }
+
+  var was = previous.getValue('status');
+  var now = current.getValue('status');
+
+  // a decided evidence is final, except an approval replaced by a newer one
+  if (['approved', 'rejected', 'superseded'].indexOf(was) > -1) {
+    if (was == 'approved' && now == 'superseded') return;
+    gs.addErrorMessage('A decided evidence cannot be changed.');
+    current.setAbortAction(true);
+    return;
+  }
+
+  // decisions are made in the compliance portal: it sets the end date (approval) or the reason (rejection)
+  if (was == 'pending' && now == 'approved' && current.valid_until.nil()) {
+    gs.addErrorMessage('Approve evidence from the compliance portal.');
+    current.setAbortAction(true);
+  }
+  if (was == 'pending' && now == 'rejected' && current.review_comment.nil()) {
+    gs.addErrorMessage('Reject evidence from the compliance portal, with a reason.');
+    current.setAbortAction(true);
+  }
 })(current, previous);]]></script>
         <sys_class_name>sys_script</sys_class_name>
         <sys_created_by>admin</sys_created_by>
@@ -36,7 +64,7 @@
         <sys_domain>global</sys_domain>
         <sys_domain_path>/</sys_domain_path>
         <sys_id>ca51220173dcdf10a621f2024ab8b7b9</sys_id>
-        <sys_mod_count>1</sys_mod_count>
+        <sys_mod_count>4</sys_mod_count>
         <sys_name>CPM evidence is kept</sys_name>
         <sys_overrides/>
         <sys_package display_value="Compliance Posture Mapper" source="x_1929776_compli_0">f7756d0a738c9310a621f2024ab8b707</sys_package>
@@ -44,7 +72,7 @@
         <sys_scope display_value="Compliance Posture Mapper">f7756d0a738c9310a621f2024ab8b707</sys_scope>
         <sys_update_name>sys_script_ca51220173dcdf10a621f2024ab8b7b9</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
-        <sys_updated_on>2026-11-03 10:31:49</sys_updated_on>
+        <sys_updated_on>2026-11-04 11:21:45</sys_updated_on>
         <template/>
         <when>before</when>
     </sys_script>

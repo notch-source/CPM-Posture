@@ -5,7 +5,7 @@
   // Everything that happens in the browser: layout, tabs, lists, search, review buttons, uploads. No Link function.
   var c = this;
   $scope.c = c;
-  c.build = '19';   // must match the "server build" at the bottom of the page
+  c.build = '20';   // must match the "server build" at the bottom of the page
 
   var BLEED = true;   // true: the dashboard uses the whole window width. false: it stays inside the portal container
   var MAX_BYTES = 3 * 1024 * 1024;
@@ -56,6 +56,7 @@
   var savedSel = recall('sel', null);
   c.tab = tabs.indexOf(savedTab) > -1 ? savedTab : tabs[0];
   c.sel = savedSel || { team: 'need', mine: 'need' };   // selected list per follow-up block
+  c.mineView = recall('mv', 'todo') === 'services' ? 'services' : 'todo';   // "My services": the to-do list or the service cards
 
   c.q = '';
   c.filter = 'all';
@@ -95,7 +96,7 @@
   };
 
   // the dashboard uses the whole window width and fills the height under its top edge:
-  // the banner and the side columns stand still
+  // the banner, the bars and the side columns stand still
   function fit() {
     var cq = document.querySelector('.cpm-cq');
     var frame = document.querySelector('.cpm-frame');
@@ -315,18 +316,29 @@
 
   /* ---------- tabs and follow-up lists ---------- */
 
-  // opens a tab and optionally a list in it. From a service page it goes back to the dashboard
+  // opens a tab and optionally a list in it (a list lives in the "To do" view of My services).
+  // From a service page it goes back to the dashboard
   c.go = function(tab, listKey) {
     c.tab = tab;
-    if (listKey) c.sel[tab === 'follow' ? 'team' : 'mine'] = listKey;
+    if (listKey) {
+      c.sel[tab === 'follow' ? 'team' : 'mine'] = listKey;
+      if (tab === 'mine') c.mineView = 'todo';
+    }
     remember('tab', tab);
     remember('sel', c.sel);
+    remember('mv', c.mineView);
     if (($scope.data || {}).screen === 'target') $window.location.href = '?id=cpm' + c.dbg();
   };
 
+  // switches "My services" between the to-do list and the service cards
+  c.setMine = function(view) {
+    c.mineView = view;
+    remember('mv', view);
+  };
+
   c.ctx = function() { return c.tab === 'follow' ? 'team' : 'mine'; };
-  c.showFollow = function() { return c.tab === 'follow' || c.tab === 'mine'; };
-  c.showCards = function() { return c.tab === 'all' || c.tab === 'mine'; };
+  c.showFollow = function() { return c.tab === 'follow' || (c.tab === 'mine' && c.mineView === 'todo'); };
+  c.showCards = function() { return c.tab === 'all' || (c.tab === 'mine' && c.mineView === 'services'); };
   c.defs = function() { return c.ctx() === 'team' ? TEAM_LISTS : MINE_LISTS; };
   c.section = function() { return c.sel[c.ctx()]; };
   c.pick = function(key) {
@@ -462,13 +474,7 @@
     return countCache.value;
   };
 
-  // a new tab, chip or search starts with a short first page, then fills in
-  $scope.$watchGroup(['c.tab', 'c.filter', 'c.q'], function() {
-    c.shown = FIRST_PAGE;
-    $timeout(function() { if (c.shown === FIRST_PAGE) c.shown = PAGE; }, 60);
-  });
-
-  // more cards appear when the work area is scrolled near its end
+  // the scrolling list: more cards appear near its end
   var mainEl = null;
   var ticking = false;
   function onScroll() {
@@ -485,6 +491,13 @@
     mainEl = document.querySelector('.cpm-main');
     if (mainEl) mainEl.addEventListener('scroll', onScroll, { passive: true });
   }, 100);
+
+  // a new tab, view, chip or search: back to the top, a short first page, then it fills in
+  $scope.$watchGroup(['c.tab', 'c.mineView', 'c.filter', 'c.q'], function() {
+    c.shown = FIRST_PAGE;
+    if (mainEl) mainEl.scrollTop = 0;
+    $timeout(function() { if (c.shown === FIRST_PAGE) c.shown = PAGE; }, 60);
+  });
 
   /* ---------- review decisions and "Refresh owners" ---------- */
 
@@ -773,79 +786,34 @@
 .cpm * { box-sizing: border-box; }&#13;
 .cpm a { color: inherit; }&#13;
 .cpm a:hover { text-decoration: none; }&#13;
-.cpm button:focus-visible, .cpm a:focus-visible, .cpm input:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }&#13;
-@keyframes cpm-up { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }&#13;
+.cpm button:focus-visible, .cpm a:focus-visible, .cpm input:focus-visible, .cpm [tabindex]:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }&#13;
+@keyframes cpm-drop { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }&#13;
 @keyframes cpm-slide { from { transform: translateX(-100%); } to { transform: translateX(260%); } }&#13;
 &#13;
 /* alerts above the dashboard */&#13;
 .cpm-alert { background: var(--action-soft); color: var(--action-ink); padding: 14px 18px; border-radius: 14px; margin-bottom: 12px; }&#13;
 .cpm-alert ul { margin: 6px 0 0 18px; }&#13;
 &#13;
-/* the frame fills the window under its top edge (set by the script). The columns scroll, the banner does not.&#13;
-   The script also widens the container to the whole window (class "bleed") */&#13;
+/* the frame fills the window under its top edge and uses the whole window width (set by the script) */&#13;
 .cpm-cq { container-type: inline-size; }&#13;
-.cpm-frame { position: relative; display: flex; flex-direction: column; gap: 16px; min-height: 560px; padding: 16px; overflow: hidden;&#13;
+.cpm-frame { position: relative; display: flex; flex-direction: column; gap: 8px; min-height: 560px; padding: 16px; overflow: hidden;&#13;
   border-radius: 26px; background: linear-gradient(180deg, #f6f9fd, #eef3fa); }&#13;
-.cpm-frame.bleed { border-radius: 0; padding: 18px 22px 12px; }&#13;
+.cpm-frame.bleed { border-radius: 0; padding: 18px 22px 8px; }&#13;
 .cpm-foot { flex: none; text-align: right; font-size: 11px; color: var(--muted); }&#13;
 &#13;
-/* messages and loading bar float over the dashboard */&#13;
-.cpm-toasts { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); width: min(560px, 92%); z-index: 60;&#13;
-  display: flex; flex-direction: column; gap: 8px; pointer-events: none; }&#13;
-.cpm-toast, .cpm-notice { pointer-events: auto; cursor: pointer; padding: 12px 18px; border-radius: 14px; font-size: 14px;&#13;
-  box-shadow: var(--shadow-lg); animation: cpm-up .25s ease both; }&#13;
-.cpm-toast.ok, .cpm-notice.ok { background: var(--ok-soft); color: var(--ok-ink); }&#13;
-.cpm-toast.error, .cpm-notice.error { background: var(--action-soft); color: var(--action-ink); }&#13;
-.cpm-x { float: right; font-weight: 700; margin-left: 12px; }&#13;
-.cpm-loading { position: absolute; left: 0; right: 0; top: 0; height: 3px; overflow: hidden; z-index: 70; background: rgba(23,64,139,.15); }&#13;
-.cpm-loading::after { content: ''; position: absolute; top: 0; bottom: 0; width: 40%; background: var(--brand); animation: cpm-slide 1s ease-in-out infinite; }&#13;
-&#13;
-/* banner */&#13;
-.cpm-hero { position: relative; flex: none; overflow: hidden; display: flex; align-items: center; gap: 24px; padding: 20px 28px;&#13;
-  border-radius: 22px; color: #fff; box-shadow: 0 14px 34px rgba(11,42,91,.24);&#13;
-  background: linear-gradient(135deg, #0b2a5b 0%, #17408b 55%, #0f7c8a 100%); }&#13;
-.cpm-hero::before { content: ''; position: absolute; right: -60px; top: -90px; width: 280px; height: 280px; border-radius: 50%; background: rgba(255,255,255,.07); }&#13;
-.cpm-hero::after { content: ''; position: absolute; left: 38%; bottom: -150px; width: 300px; height: 300px; border-radius: 50%; background: rgba(94,234,212,.08); }&#13;
-.cpm-hero &gt; * { position: relative; z-index: 1; }&#13;
-.cpm-hero-ring { position: relative; width: 98px; height: 98px; flex: none; }&#13;
-.cpm-hero-ring svg { width: 100%; height: 100%; overflow: visible; }&#13;
-.cpm-hero-label { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }&#13;
-.cpm-hero-label b { font-size: 22px; line-height: 1; }&#13;
-.cpm-hero-label span { font-size: 10px; opacity: .75; }&#13;
-.cpm-hero .track { fill: none; stroke: rgba(255,255,255,.2); stroke-width: 7; }&#13;
-.cpm-hero .bar { fill: none; stroke: #5eead4; stroke-width: 7; stroke-linecap: round; transition: stroke-dasharray .9s ease; }&#13;
-.cpm-hero .goal-tick { stroke: #fff; stroke-width: 1.6; stroke-linecap: round; opacity: .9; }&#13;
-.cpm-hero-text { flex: 1; min-width: 0; }&#13;
-.cpm-hero h2 { margin: 2px 0 0; font-size: 26px; color: #fff; }&#13;
-.cpm-headline { margin: 4px 0 8px; font-size: 15px; opacity: .95; max-width: 560px; }&#13;
-.cpm-hchip { display: inline-block; font-size: 11px; padding: 3px 11px; border-radius: 999px; background: rgba(255,255,255,.16); }&#13;
-.cpm-eyebrow { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; opacity: .75; }&#13;
-.cpm-eyebrow.dark { color: var(--brand); opacity: 1; }&#13;
-.cpm-hero-figs { display: flex; gap: 10px; flex: none; }&#13;
-.cpm-fig { min-width: 108px; padding: 10px 14px; border-radius: 14px; background: rgba(255,255,255,.13); border: 1px solid rgba(255,255,255,.2); transition: background .15s; }&#13;
-.cpm-fig.clickable { cursor: pointer; }&#13;
-.cpm-fig.clickable:hover { background: rgba(255,255,255,.24); }&#13;
-.cpm-fig b { display: block; font-size: 22px; line-height: 1.15; }&#13;
-.cpm-fig span { font-size: 11px; opacity: .85; }&#13;
-.cpm-hero-actions { display: flex; flex-direction: column; gap: 6px; align-items: stretch; flex: none; }&#13;
-.cpm-hbtn { border: 1px solid rgba(255,255,255,.35); background: rgba(255,255,255,.12); color: #fff; border-radius: 999px; padding: 6px 14px;&#13;
-  font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; }&#13;
-.cpm-hbtn:hover { background: rgba(255,255,255,.24); }&#13;
-.cpm-hbtn[disabled] { opacity: .6; cursor: default; }&#13;
-&#13;
-/* three columns: guide | work | stats. Each one scrolls by itself */&#13;
+/* three columns: guide | middle | stats. The side columns run the full height */&#13;
 .cpm-shell { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: 272px minmax(0, 1fr) 330px; grid-template-rows: minmax(0, 1fr); gap: 18px; }&#13;
 .cpm-shell.no-cat { grid-template-columns: minmax(0, 1fr) 330px; }&#13;
 .cpm-catalog, .cpm-main, .cpm-side { min-height: 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: #c3cddd transparent; }&#13;
-.cpm-main { padding: 2px 8px 28px 2px; }&#13;
+.cpm-center { position: relative; display: flex; flex-direction: column; gap: 10px; min-height: 0; min-width: 0; }&#13;
+.cpm-main { flex: 1 1 auto; padding: 2px 8px 28px 2px; }   /* the only scrolling part of the middle column */&#13;
 .cpm-side { display: flex; flex-direction: column; gap: 14px; padding: 2px 4px 20px 2px; }&#13;
 .cpm-catalog { background: var(--card); border: 1px solid var(--line); border-radius: 20px; padding: 16px; box-shadow: var(--shadow); }&#13;
 &#13;
-/* medium containers: the guide slides over the work area, the figures leave the banner */&#13;
+/* medium containers: the guide slides over the middle column */&#13;
 @container (max-width: 1099px) {&#13;
   .cpm-shell, .cpm-shell.no-cat { grid-template-columns: minmax(0, 1fr) 300px; position: relative; }&#13;
   .cpm-catalog { position: absolute; left: 0; top: 0; bottom: 0; width: 300px; z-index: 30; box-shadow: var(--shadow-lg); }&#13;
-  .cpm-hero-figs { display: none; }&#13;
 }&#13;
 /* small containers: one column, the page scrolls normally */&#13;
 @container (max-width: 759px) {&#13;
@@ -854,8 +822,68 @@
   .cpm-hero-actions { flex-direction: row; flex-wrap: wrap; }&#13;
   .cpm-shell, .cpm-shell.no-cat { display: flex; flex-direction: column; }&#13;
   .cpm-catalog, .cpm-main, .cpm-side { overflow: visible; position: static; width: auto; box-shadow: none; }&#13;
-  .cpm-side { order: 1; } .cpm-main { order: 2; } .cpm-catalog { order: 3; }&#13;
+  .cpm-main { flex: none; }&#13;
+  .cpm-center { order: 1; } .cpm-side { order: 2; } .cpm-catalog { order: 3; }&#13;
 }&#13;
+&#13;
+/* messages: a strip above the banner (the banner moves down while one is shown) */&#13;
+.cpm-notes { flex: none; display: flex; flex-direction: column; gap: 6px; }&#13;
+.cpm-toast, .cpm-notice { cursor: pointer; padding: 9px 16px; border-radius: 12px; font-size: 13px; animation: cpm-drop .25s ease both; }&#13;
+.cpm-toast.ok, .cpm-notice.ok { background: var(--ok-soft); color: var(--ok-ink); }&#13;
+.cpm-toast.error, .cpm-notice.error { background: var(--action-soft); color: var(--action-ink); }&#13;
+.cpm-x { float: right; font-weight: 700; margin-left: 12px; }&#13;
+.cpm-loading { position: absolute; left: 0; right: 0; top: 0; height: 3px; overflow: hidden; z-index: 70; background: rgba(23,64,139,.15); border-radius: 3px; }&#13;
+.cpm-loading::after { content: ''; position: absolute; top: 0; bottom: 0; width: 40%; background: var(--brand); animation: cpm-slide 1s ease-in-out infinite; }&#13;
+&#13;
+/* banner: the width of the middle column, never scrolls */&#13;
+.cpm-hero { position: relative; flex: none; overflow: hidden; display: flex; align-items: center; gap: 20px; padding: 16px 22px;&#13;
+  border-radius: 22px; color: #fff; box-shadow: 0 14px 34px rgba(11,42,91,.24);&#13;
+  background: linear-gradient(135deg, #0b2a5b 0%, #17408b 55%, #0f7c8a 100%); }&#13;
+.cpm-hero::before { content: ''; position: absolute; right: -50px; top: -80px; width: 240px; height: 240px; border-radius: 50%; background: rgba(255,255,255,.07); }&#13;
+.cpm-hero::after { content: ''; position: absolute; left: 40%; bottom: -140px; width: 260px; height: 260px; border-radius: 50%; background: rgba(94,234,212,.08); }&#13;
+.cpm-hero &gt; * { position: relative; z-index: 1; }&#13;
+.cpm-hero-ring { position: relative; width: 88px; height: 88px; flex: none; }&#13;
+.cpm-hero-ring svg { width: 100%; height: 100%; overflow: visible; }&#13;
+.cpm-hero-label { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }&#13;
+.cpm-hero-label b { font-size: 20px; line-height: 1; }&#13;
+.cpm-hero-label span { font-size: 9px; opacity: .75; }&#13;
+.cpm-hero .track { fill: none; stroke: rgba(255,255,255,.2); stroke-width: 7; }&#13;
+.cpm-hero .bar { fill: none; stroke: #5eead4; stroke-width: 7; stroke-linecap: round; transition: stroke-dasharray .9s ease; }&#13;
+.cpm-hero .goal-tick { stroke: #fff; stroke-width: 1.6; stroke-linecap: round; opacity: .9; }&#13;
+.cpm-hero-text { flex: 1; min-width: 0; }&#13;
+.cpm-hero h2 { margin: 2px 0 0; font-size: 24px; color: #fff; }&#13;
+.cpm-headline { margin: 3px 0 8px; font-size: 14px; opacity: .95; }&#13;
+.cpm-hchip { display: inline-block; font-size: 11px; padding: 3px 11px; border-radius: 999px; background: rgba(255,255,255,.16); }&#13;
+.cpm-eyebrow { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; opacity: .75; }&#13;
+.cpm-eyebrow.dark { color: var(--brand); opacity: 1; }&#13;
+.cpm-hero-actions { display: flex; flex-direction: column; gap: 6px; align-items: stretch; flex: none; }&#13;
+.cpm-hbtn { border: 1px solid rgba(255,255,255,.35); background: rgba(255,255,255,.12); color: #fff; border-radius: 999px; padding: 6px 14px;&#13;
+  font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; }&#13;
+.cpm-hbtn:hover { background: rgba(255,255,255,.24); }&#13;
+.cpm-hbtn[disabled] { opacity: .6; cursor: default; }&#13;
+&#13;
+/* fixed bars under the banner: tabs, filters and search never scroll */&#13;
+.cpm-bar { flex: none; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }&#13;
+.cpm-tools { padding: 0 2px; }&#13;
+.cpm-tools-title { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-right: 4px; }&#13;
+.cpm-tabs { display: flex; gap: 6px; flex-wrap: wrap; }&#13;
+.cpm-tabs button { border: 0; background: transparent; padding: 8px 16px; font-weight: 600; color: var(--muted); border-radius: 999px; cursor: pointer; }&#13;
+.cpm-tabs button:hover { background: var(--idle-soft); }&#13;
+.cpm-tabs button.active { background: var(--brand); color: #fff; }&#13;
+.cpm-subtabs { display: inline-flex; gap: 4px; padding: 3px; background: var(--idle-soft); border-radius: 999px; margin-left: auto; }&#13;
+.cpm-bar &gt; .cpm-subtabs:first-child { margin-left: 0; }&#13;
+.cpm-subtabs button { border: 0; background: transparent; padding: 6px 14px; border-radius: 999px; font-weight: 600; font-size: 13px; color: var(--muted); cursor: pointer; }&#13;
+.cpm-subtabs button.active { background: var(--card); color: var(--brand); box-shadow: var(--shadow); }&#13;
+.cpm-count { display: inline-block; min-width: 22px; text-align: center; background: var(--review); color: #fff; border-radius: 999px; font-size: 11px; padding: 1px 7px; margin-left: 4px; }&#13;
+.cpm-count.idle { background: var(--idle); }&#13;
+.cpm-tabs button.active .cpm-count { background: #fff; color: var(--brand); }&#13;
+&#13;
+/* chips and search */&#13;
+.cpm-chips { display: flex; flex-wrap: wrap; gap: 6px; }&#13;
+.cpm-chips button { border: 1px solid #cbd5e1; background: var(--card); border-radius: 999px; padding: 6px 14px; font-size: 13px; cursor: pointer; }&#13;
+.cpm-chips button.active { background: var(--brand); border-color: var(--brand); color: #fff; }&#13;
+.cpm-searchbar { display: flex; gap: 8px; align-items: center; margin-left: auto; }&#13;
+.cpm-search { border: 1px solid #cbd5e1; border-radius: 12px; padding: 8px 14px; min-width: 220px; background: #fff; }&#13;
 &#13;
 /* stats guide */&#13;
 .cpm-cat-head h4 { margin: 0 0 2px; font-size: 16px; }&#13;
@@ -878,6 +906,7 @@
 .cpm-side-card h4 small { color: var(--muted); font-weight: 400; margin-left: 6px; }&#13;
 .cpm-kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }&#13;
 .cpm-kpi { position: relative; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 12px 12px 10px 14px; }&#13;
+button.cpm-kpi { font: inherit; color: inherit; text-align: left; width: 100%; display: block; }&#13;
 .cpm-kpi::before { content: ''; position: absolute; left: 0; top: 12px; bottom: 12px; width: 4px; border-radius: 0 4px 4px 0; background: var(--brand); }&#13;
 .cpm-kpi i { font-style: normal; position: absolute; right: 8px; top: 8px; width: 24px; height: 24px; border-radius: 50%;&#13;
   display: flex; align-items: center; justify-content: center; font-size: 12px; background: var(--idle-soft); color: var(--idle-ink); }&#13;
@@ -917,14 +946,6 @@
 .cpm-apr span { font-size: 11px; color: var(--muted); }&#13;
 .cpm-apr-foot { margin: 8px 0 0; }&#13;
 &#13;
-/* tabs */&#13;
-.cpm-tabs { display: flex; gap: 6px; margin: 2px 0 14px; flex-wrap: wrap; }&#13;
-.cpm-tabs button { border: 0; background: transparent; padding: 9px 16px; font-weight: 600; color: var(--muted); border-radius: 999px; cursor: pointer; }&#13;
-.cpm-tabs button:hover { background: var(--idle-soft); }&#13;
-.cpm-tabs button.active { background: var(--brand); color: #fff; }&#13;
-.cpm-count { display: inline-block; min-width: 22px; text-align: center; background: var(--review); color: #fff; border-radius: 999px; font-size: 11px; padding: 1px 7px; margin-left: 4px; }&#13;
-.cpm-tabs button.active .cpm-count { background: #fff; color: var(--brand); }&#13;
-&#13;
 /* empty states: "good" ones celebrate */&#13;
 .cpm-empty { text-align: center; color: var(--muted); padding: 28px; background: var(--card); border: 1px dashed var(--line); border-radius: 16px; margin-bottom: 14px; }&#13;
 .cpm-empty.good { background: var(--ok-soft); border-color: transparent; color: var(--ok-ink); font-weight: 600; }&#13;
@@ -937,7 +958,7 @@
 .cpm-next h4 { margin: 2px 0 2px; font-size: 17px; }&#13;
 .cpm-next p { margin: 0; color: var(--muted); font-size: 13px; }&#13;
 &#13;
-/* review inbox and buttons (no entry animation: tabs must feel instant) */&#13;
+/* review inbox and buttons */&#13;
 .cpm-review { background: var(--card); border: 1px solid var(--line); border-left: 4px solid var(--review); border-radius: 18px; padding: 16px 20px; margin-bottom: 12px; box-shadow: var(--shadow); }&#13;
 .cpm-review-top { display: flex; justify-content: space-between; gap: 12px; }&#13;
 .cpm-review-title { font-weight: 600; font-size: 16px; }&#13;
@@ -957,7 +978,7 @@
 .cpm-rollup { background: var(--bg); border-radius: 12px; padding: 10px 14px; font-size: 13px; margin: 8px 0 12px; }&#13;
 &#13;
 /* tables */&#13;
-.cpm-tablewrap { overflow-x: auto; margin-top: 8px; }&#13;
+.cpm-tablewrap { overflow-x: auto; margin-top: 4px; }&#13;
 .cpm-table { width: 100%; border-collapse: collapse; font-size: 14px; }&#13;
 .cpm-table th { text-align: left; font-size: 12px; color: var(--muted); font-weight: 600; padding: 8px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }&#13;
 .cpm-table td { padding: 10px; border-bottom: 1px solid #f1f5f9; vertical-align: top; }&#13;
@@ -973,16 +994,8 @@
 .cpm-status.st-awaiting { background: var(--review-soft); color: var(--review-ink); }&#13;
 .cpm-flag { display: inline-block; font-size: 12px; font-weight: 700; padding: 2px 10px; border-radius: 999px; background: var(--watch-soft); color: var(--watch-ink); white-space: nowrap; }&#13;
 &#13;
-/* chips and search */&#13;
-.cpm-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }&#13;
-.cpm-chips { margin-bottom: 6px; }&#13;
-.cpm-chips button { border: 1px solid #cbd5e1; background: var(--card); border-radius: 999px; padding: 6px 14px; margin: 0 6px 6px 0; font-size: 13px; cursor: pointer; }&#13;
-.cpm-chips button.active { background: var(--brand); border-color: var(--brand); color: #fff; }&#13;
-.cpm-searchbar { display: flex; gap: 8px; align-items: center; }&#13;
-.cpm-search { border: 1px solid #cbd5e1; border-radius: 12px; padding: 9px 14px; min-width: 240px; background: #fff; }&#13;
-&#13;
 /* service cards */&#13;
-.cpm-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 14px; margin: 12px 0 14px; }&#13;
+.cpm-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 14px; margin: 4px 0 14px; }&#13;
 .cpm-more { text-align: center; margin: 4px 0 26px; }&#13;
 .cpm-card { display: block; background: var(--card); border: 1px solid var(--line); border-top: 4px solid var(--idle); border-radius: 18px; padding: 16px; box-shadow: var(--shadow); transition: transform .15s, box-shadow .15s; }&#13;
 .cpm-card.risk-green { border-top-color: var(--ok); } .cpm-card.risk-yellow { border-top-color: var(--watch); } .cpm-card.risk-red { border-top-color: var(--action); }&#13;
@@ -1215,14 +1228,14 @@
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2026-10-22 15:09:33</sys_created_on>
         <sys_id>1ea1151e73c81710a621f2024ab8b70c</sys_id>
-        <sys_mod_count>76</sys_mod_count>
+        <sys_mod_count>82</sys_mod_count>
         <sys_name>CPM Compliance</sys_name>
         <sys_package display_value="Compliance Posture Mapper" source="x_1929776_compli_0">f7756d0a738c9310a621f2024ab8b707</sys_package>
         <sys_policy/>
         <sys_scope display_value="Compliance Posture Mapper">f7756d0a738c9310a621f2024ab8b707</sys_scope>
         <sys_update_name>sp_widget_1ea1151e73c81710a621f2024ab8b70c</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
-        <sys_updated_on>2026-11-03 10:07:12</sys_updated_on>
+        <sys_updated_on>2026-11-04 22:58:52</sys_updated_on>
         <template><![CDATA[<div class="cpm">
 
   <div class="cpm-alert" ng-if="!c.build">
@@ -1241,62 +1254,20 @@
   <div class="cpm-cq" ng-if="!data.error">
     <div class="cpm-frame">
 
-      <div class="cpm-toasts">
-        <div class="cpm-toast" ng-class="c.toast.type" ng-if="c.toast" ng-click="c.toast = null">{{c.toast.text}} <span class="cpm-x">×</span></div>
-        <div class="cpm-notice" ng-class="data.notice.type" ng-if="data.notice" ng-click="data.notice = null">{{data.notice.text}} <span class="cpm-x">×</span></div>
-      </div>
-      <div class="cpm-loading" ng-if="c.loading > 0"></div>
-
-      <!-- ========== banner: stays in place ========== -->
-      <header class="cpm-hero">
-        <div class="cpm-hero-ring">
-          <svg viewBox="0 0 64 64">
-            <circle class="track" cx="32" cy="32" r="26"></circle>
-            <circle class="bar" cx="32" cy="32" r="26" transform="rotate(-90 32 32)"
-                    ng-attr-stroke-dasharray="{{c.hero() * 1.6336}} 163.36"></circle>
-            <line class="goal-tick" ng-attr-x1="{{c.tick().x1}}" ng-attr-y1="{{c.tick().y1}}" ng-attr-x2="{{c.tick().x2}}" ng-attr-y2="{{c.tick().y2}}"></line>
-          </svg>
-          <div class="cpm-hero-label"><b>{{c.hero()}}%</b><span>covered</span></div>
-        </div>
-
-        <div class="cpm-hero-text">
-          <span class="cpm-eyebrow">Compliance Posture · GRC</span>
-          <h2>{{data.isAdmin ? 'Compliance team' : 'My compliance'}}</h2>
-          <p class="cpm-headline">{{c.headline()}}</p>
-          <span class="cpm-hchip">Goal {{data.goal}}% of services covered</span>
-        </div>
-
-        <div class="cpm-hero-figs" ng-if="data.isAdmin">
-          <div class="cpm-fig"><b>{{data.company.covered}}/{{data.company.total}}</b><span>Services covered</span></div>
-          <div class="cpm-fig clickable" ng-click="c.go('review')"><b>{{data.team.kpi.review}}</b><span>To review</span></div>
-          <div class="cpm-fig clickable" ng-click="c.go('follow', 'expiring')"><b>{{data.follow.expiring.count}}</b><span>Expiring soon</span></div>
-        </div>
-        <div class="cpm-hero-figs" ng-if="!data.isAdmin && data.mine.kpi.targets">
-          <div class="cpm-fig"><b>{{data.mine.kpi.covered}}/{{data.mine.kpi.targets}}</b><span>Services covered</span></div>
-          <div class="cpm-fig clickable" ng-click="c.go('mine', 'need')"><b>{{data.myFollow.need.count}}</b><span>Need evidence</span></div>
-          <div class="cpm-fig clickable" ng-click="c.go('mine', 'expiring')"><b>{{data.myFollow.expiring.count}}</b><span>Expiring soon</span></div>
-        </div>
-
-        <div class="cpm-hero-actions">
-          <button class="cpm-hbtn" ng-click="c.toggleGuide()">{{c.catOpen ? 'Hide stats guide' : 'Stats guide'}}</button>
-          <button class="cpm-hbtn" ng-if="data.isAdmin" ng-disabled="c.syncing" ng-click="c.syncNow()" title="Refreshes the owners from the CMDB">{{c.syncing ? 'Refreshing…' : 'Refresh owners'}}</button>
-          <button class="cpm-hbtn" ng-if="data.isAdmin" ng-disabled="c.exporting" ng-click="c.exportAudit()">{{c.exporting ? 'Preparing…' : 'Audit CSV'}}</button>
-        </div>
-      </header>
-
       <div class="cpm-shell" ng-class="{'no-cat': !c.catOpen}">
 
         <!-- ========== left: what the numbers mean ========== -->
-        <aside class="cpm-catalog" ng-if="c.catOpen">
+        <aside class="cpm-catalog" ng-if="c.catOpen" aria-label="Stats guide">
           <div class="cpm-cat-head">
             <h4>Stats guide</h4>
             <p>What every number means and how it is calculated.</p>
-            <input type="text" class="cpm-cat-search" ng-model="c.catQ" ng-model-options="{debounce: 200}" placeholder="Search the guide…" autocomplete="off">
+            <input type="text" class="cpm-cat-search" ng-model="c.catQ" ng-model-options="{debounce: 200}" placeholder="Search the guide…" autocomplete="off" aria-label="Search the guide">
           </div>
           <section class="cpm-cat-group" ng-repeat="g in c.catalog" ng-if="!g.team || data.isAdmin" ng-show="(g.items | filter:c.catMatch).length">
             <h5>{{g.title}}</h5>
             <div class="cpm-cat-item" ng-repeat="e in g.items | filter:c.catMatch" ng-if="!e.team || data.isAdmin"
-                 ng-class="{go: e.list}" ng-click="c.jump(e)">
+                 ng-class="{go: e.list}" ng-click="c.jump(e)" ng-keydown="$event.key === 'Enter' && c.jump(e)"
+                 ng-attr-role="{{e.list ? 'button' : undefined}}" ng-attr-tabindex="{{e.list ? 0 : undefined}}">
               <span class="cpm-dot {{e.tone}}"></span>
               <div>
                 <b>{{e.title}}</b>
@@ -1307,321 +1278,369 @@
           </section>
         </aside>
 
-        <!-- ========== center: the work ========== -->
-        <main class="cpm-main">
+        <!-- ========== middle: messages, banner, fixed bars, scrolling list ========== -->
+        <section class="cpm-center">
 
-          <div ng-if="data.screen == 'home'">
-
-            <nav class="cpm-tabs" ng-if="data.isAdmin">
-              <button ng-class="{active: c.tab == 'review'}" ng-click="c.go('review')">Review inbox <span class="cpm-count">{{data.team.kpi.review}}</span></button>
-              <button ng-class="{active: c.tab == 'follow'}" ng-click="c.go('follow')">Follow-up</button>
-              <button ng-class="{active: c.tab == 'all'}" ng-click="c.go('all')">All services</button>
-              <button ng-class="{active: c.tab == 'mine'}" ng-click="c.go('mine')">My services</button>
-            </nav>
-
-            <!-- review inbox -->
-            <section ng-if="data.isAdmin && c.tab == 'review'">
-              <div class="cpm-empty good" ng-if="!data.inbox.length">All clear: nothing is waiting for review.</div>
-
-              <article class="cpm-review" ng-repeat="e in data.inbox track by e.id">
-                <div class="cpm-review-top">
-                  <div>
-                    <div class="cpm-review-title">{{e.control}} <span class="cpm-tag" ng-if="e.renewal">Renewal</span></div>
-                    <div class="cpm-sub">{{e.target}} · {{e.number}} · submitted by {{e.by}}</div>
-                  </div>
-                  <span class="cpm-age" ng-class="{late: e.ageDays > 5}">{{e.ageDays}} day{{e.ageDays == 1 ? '' : 's'}} waiting</span>
-                </div>
-
-                <p class="cpm-guide" ng-if="e.guidance"><b>Required:</b> {{e.guidance}}</p>
-
-                <div class="cpm-files">
-                  <button class="cpm-filebtn" ng-repeat="f in e.files" ng-disabled="c.opening == f.id" ng-click="c.open(e.id, f)">
-                    {{f.isImage ? 'View' : 'Download'}} · {{f.name}}
-                  </button>
-                </div>
-
-                <div class="cpm-actions" ng-if="e.canReview">
-                  <button class="cpm-btn ok" ng-disabled="c.working[e.id]" ng-click="c.approve(e)">Approve</button>
-                  <button class="cpm-btn bad" ng-disabled="c.working[e.id]" ng-click="c.rejecting[e.id] = !c.rejecting[e.id]">Reject</button>
-                </div>
-                <div class="cpm-rejectbox" ng-if="c.rejecting[e.id]">
-                  <textarea ng-model="c.comment[e.id]" rows="2" placeholder="What is wrong? For example: the screenshot is blurry, or it does not show the date."></textarea>
-                  <button class="cpm-btn bad" ng-disabled="c.working[e.id] || !c.comment[e.id]" ng-click="c.reject(e)">Send rejection</button>
-                </div>
-                <div class="cpm-sub" ng-if="!e.canReview">You submitted this yourself, so another reviewer must decide.</div>
-              </article>
-            </section>
-
-            <!-- "Start here" -->
-            <section class="cpm-next clickable" ng-if="c.tab == 'mine' && c.nextAction()" ng-click="c.openTarget(c.nextAction().item.targetId)">
-              <div>
-                <span class="cpm-eyebrow dark">Start here</span>
-                <h4>{{c.nextAction().item.control}}</h4>
-                <p>{{c.nextAction().item.target}} · {{c.nextAction().why}}</p>
-              </div>
-              <a class="cpm-btn brand" ng-href="?id=cpm&target={{c.nextAction().item.targetId}}{{c.dbg()}}" ng-click="$event.stopPropagation()">Open</a>
-            </section>
-
-            <!-- follow-up lists -->
-            <section class="cpm-panel" ng-if="c.showFollow()">
-              <h4>{{c.ctx() == 'team' ? 'Follow-up: the whole company' : 'Follow-up: my own controls'}}</h4>
-
-              <div class="cpm-chips">
-                <button ng-repeat="d in c.defs()" ng-class="{active: c.section() == d.key}" ng-click="c.pick(d.key)">{{d.label}} ({{c.countOf(d.key)}})</button>
-              </div>
-
-              <div class="cpm-empty good" ng-if="!c.items().length">{{c.emptyText()}}</div>
-
-              <div class="cpm-tablewrap" ng-if="c.items().length">
-                <table class="cpm-table">
-                  <thead>
-                    <tr>
-                      <th>Service or CI</th>
-                      <th ng-if="c.section() != 'uncovered'">Control</th>
-                      <th>Status</th>
-                      <th>Owner</th>
-                      <th>Detail</th>
-                      <th ng-if="c.section() == 'noOwner' || c.section() == 'uncovered'"></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr class="clickable" ng-repeat="r in c.items() track by $index" ng-click="c.openTarget(r.targetId)">
-                      <td><a ng-href="?id=cpm&target={{r.targetId}}{{c.dbg()}}" ng-click="$event.stopPropagation()">{{r.target}}</a></td>
-                      <td ng-if="c.section() != 'uncovered'"><b>{{r.ref}}</b> {{r.control}}</td>
-                      <td><span class="cpm-status st-{{r.status}}">{{c.label[r.status]}}</span></td>
-                      <td>
-                        <span ng-if="r.owner">{{r.owner}}</span>
-                        <span class="cpm-flag" ng-if="r.ownerFlag" title="{{r.ownerFlag}}">⚠ {{r.owner ? 'No owner in the CMDB' : 'No owner'}}</span>
-                      </td>
-                      <td ng-switch="c.section()">
-                        <span ng-switch-when="expiring">Valid until {{r.until}} · {{r.daysLeft}} day{{r.daysLeft == 1 ? '' : 's'}} left</span>
-                        <span ng-switch-when="stale">Expired on {{r.until}}</span>
-                        <span ng-switch-when="noOwner">{{r.ownerFlag}}</span>
-                        <span ng-switch-when="uncovered">{{r.note}} {{r.ownerFlag}}</span>
-                        <span ng-switch-default>{{r.status == 'rejected' ? 'The last evidence was rejected: upload it again.' : 'No evidence yet.'}}</span>
-                      </td>
-                      <td ng-if="c.section() == 'noOwner' || c.section() == 'uncovered'">
-                        <a ng-href="/cmdb_ci.do?sys_id={{r.targetId}}" target="_blank" ng-click="$event.stopPropagation()">Open in the CMDB</a>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-              <div class="cpm-sub" ng-if="c.more()">and {{c.more()}} more. The first 200 rows are listed.</div>
-            </section>
-
-            <div class="cpm-empty" ng-if="c.tab == 'mine' && !data.mine.rows.length">You do not own any service or CI with controls yet.</div>
-
-            <!-- search and service cards: drawn page by page -->
-            <section class="cpm-toolbar" ng-if="c.showCards() && c.rows().length">
-              <div class="cpm-chips">
-                <button ng-repeat="f in c.filters" ng-class="{active: c.filter == f.key}" ng-click="c.filter = f.key">{{f.label}} ({{c.counts()[f.key]}})</button>
-              </div>
-              <div class="cpm-searchbar">
-                <input type="text" class="cpm-search" ng-model="c.q" ng-model-options="{debounce: 250}" placeholder="Search a service…" autocomplete="off">
-                <button class="cpm-btn plain" ng-if="c.q" ng-click="c.q = ''">Clear</button>
-              </div>
-            </section>
-            <div class="cpm-sub" ng-if="c.showCards() && c.limited()">Only the 500 weakest are listed. Type a name to narrow down, the numbers on the right cover everything.</div>
-
-            <section class="cpm-grid" ng-if="c.showCards() && c.rows().length">
-              <a class="cpm-card risk-{{::r.risk}}" ng-repeat="r in c.visibleRows() track by r.key" ng-href="?id=cpm&target={{::r.id}}{{::c.dbg()}}">
-                <div class="cpm-card-head">
-                  <svg viewBox="0 0 64 64" class="cpm-ring">
-                    <circle class="track" cx="32" cy="32" r="26"></circle>
-                    <circle class="bar" cx="32" cy="32" r="26" transform="rotate(-90 32 32)" ng-attr-stroke-dasharray="{{::r.dash}} 163.36"></circle>
-                    <text x="32" y="37" text-anchor="middle">{{::r.pct}}</text>
-                  </svg>
-                  <div>
-                    <div class="cpm-card-title">{{::r.name}}</div>
-                    <span class="cpm-pill r-{{::r.risk}}">{{::c.riskLabel[r.risk]}}</span>
-                    <small class="cpm-kind">{{::r.kind}}</small>
-                  </div>
-                </div>
-                <div class="cpm-seg" title="{{::r.tip}}">
-                  <i class="ok" ng-style="::{'flex-grow': r.g.ok}"></i>
-                  <i class="watch" ng-style="::{'flex-grow': r.g.watch}"></i>
-                  <i class="review" ng-style="::{'flex-grow': r.g.review}"></i>
-                  <i class="action" ng-style="::{'flex-grow': r.g.action}"></i>
-                  <i class="idle" ng-style="::{'flex-grow': r.g.idle}"></i>
-                </div>
-                <div class="cpm-card-foot">
-                  <span>{{::r.approved}} of {{::r.total}} approved</span>
-                  <span ng-if="::r.todo">{{::r.todo}} to do</span>
-                </div>
-              </a>
-            </section>
-            <div class="cpm-more" ng-if="c.showCards() && c.cardsLeft() > 0">
-              <button class="cpm-btn plain" ng-click="c.moreCards()">Show {{c.cardsLeft() > 24 ? 24 : c.cardsLeft()}} more ({{c.cardsLeft()}} left)</button>
-            </div>
-            <div class="cpm-empty" ng-if="c.showCards() && c.rows().length && !c.matching().length">No service or CI matches your search.</div>
+          <!-- messages: above the banner -->
+          <div class="cpm-notes" ng-if="c.toast || data.notice" aria-live="polite">
+            <div class="cpm-toast" ng-class="c.toast.type" ng-if="c.toast" ng-click="c.toast = null" ng-attr-role="{{c.toast.type == 'error' ? 'alert' : 'status'}}">{{c.toast.text}} <span class="cpm-x">×</span></div>
+            <div class="cpm-notice" ng-class="data.notice.type" ng-if="data.notice" ng-click="data.notice = null" ng-attr-role="{{data.notice.type == 'error' ? 'alert' : 'status'}}">{{data.notice.text}} <span class="cpm-x">×</span></div>
           </div>
+          <div class="cpm-loading" ng-if="c.loading > 0"></div>
 
-          <!-- ====================== ONE CI OR SERVICE ====================== -->
-          <div ng-if="data.screen == 'target'">
-            <a class="cpm-back" ng-href="?id=cpm{{c.dbg()}}">← Back to the dashboard</a>
-
-            <header class="cpm-head risk-{{data.target.summary.risk}}">
-              <svg viewBox="0 0 64 64" class="cpm-ring big">
+          <header class="cpm-hero">
+            <div class="cpm-hero-ring" role="img" aria-label="{{c.hero()}} percent of services covered">
+              <svg viewBox="0 0 64 64">
                 <circle class="track" cx="32" cy="32" r="26"></circle>
                 <circle class="bar" cx="32" cy="32" r="26" transform="rotate(-90 32 32)"
-                        ng-attr-stroke-dasharray="{{data.target.summary.coverage * 1.6336}} 163.36"></circle>
-                <text x="32" y="37" text-anchor="middle">{{data.target.summary.total ? data.target.summary.coverage + '%' : '–'}}</text>
+                        ng-attr-stroke-dasharray="{{c.hero() * 1.6336}} 163.36"></circle>
+                <line class="goal-tick" ng-attr-x1="{{c.tick().x1}}" ng-attr-y1="{{c.tick().y1}}" ng-attr-x2="{{c.tick().x2}}" ng-attr-y2="{{c.tick().y2}}"></line>
               </svg>
-              <div class="cpm-head-main">
-                <h3>{{data.target.name}} <span class="cpm-tag" ng-if="data.target.kind">{{data.target.kind}}</span></h3>
-                <div class="cpm-sub">Owner in the CMDB: {{data.target.owner || 'not set'}}</div>
-                <div class="cpm-partof" ng-if="data.target.partOf.length">
-                  Part of:
-                  <span ng-repeat="p in data.target.partOf">
-                    <a ng-if="p.canOpen" ng-href="?id=cpm&target={{p.id}}{{c.dbg()}}">{{p.name}}</a><span ng-if="!p.canOpen">{{p.name}}</span><span ng-if="!$last">, </span>
-                  </span>
-                </div>
-                <div class="cpm-seg">
-                  <i class="ok" ng-style="{'flex-grow': data.target.summary.approved - data.target.summary.expiring}"></i>
-                  <i class="watch" ng-style="{'flex-grow': data.target.summary.expiring}"></i>
-                  <i class="review" ng-style="{'flex-grow': data.target.summary.awaiting}"></i>
-                  <i class="action" ng-style="{'flex-grow': data.target.summary.rejected + data.target.summary.expired}"></i>
-                  <i class="idle" ng-style="{'flex-grow': data.target.summary.missing}"></i>
-                </div>
-              </div>
-              <div class="cpm-head-stats">
-                <div><b>{{data.target.summary.approved}}</b><span>approved</span></div>
-                <div><b>{{data.target.summary.awaiting}}</b><span>in review</span></div>
-                <div><b>{{data.target.summary.rejected + data.target.summary.expired}}</b><span>rejected or stale</span></div>
-                <div><b>{{data.target.summary.missing}}</b><span>missing</span></div>
-              </div>
-            </header>
+              <div class="cpm-hero-label"><b>{{c.hero()}}%</b><span>covered</span></div>
+            </div>
+            <div class="cpm-hero-text">
+              <span class="cpm-eyebrow">Compliance Posture · GRC</span>
+              <h2>{{data.isAdmin ? 'Compliance team' : 'My compliance'}}</h2>
+              <p class="cpm-headline">{{c.headline()}}</p>
+              <span class="cpm-hchip">Goal: {{data.goal}}% of services covered</span>
+            </div>
+            <div class="cpm-hero-actions">
+              <button type="button" class="cpm-hbtn" ng-click="c.toggleGuide()">{{c.catOpen ? 'Hide stats guide' : 'Stats guide'}}</button>
+              <button type="button" class="cpm-hbtn" ng-if="data.isAdmin" ng-disabled="c.syncing" ng-click="c.syncNow()" title="Refreshes the owners from the CMDB">{{c.syncing ? 'Refreshing…' : 'Refresh owners'}}</button>
+              <button type="button" class="cpm-hbtn" ng-if="data.isAdmin" ng-disabled="c.exporting" ng-click="c.exportAudit()">{{c.exporting ? 'Preparing…' : 'Audit CSV'}}</button>
+            </div>
+          </header>
 
-            <section class="cpm-panel" ng-if="data.target.components.length">
-              <h4>Service composition</h4>
-              <p class="cpm-sub">
-                According to the CMDB relationships, this service is made of {{data.target.rollup.components}} component{{data.target.rollup.components == 1 ? '' : 's'}}.
-                Every approval stores the list that was valid on that day.
-              </p>
-              <div class="cpm-rollup" ng-if="data.target.rollup.total">
-                Components together: <b>{{data.target.rollup.approved}} of {{data.target.rollup.total}}</b> controls approved ({{data.target.rollup.coverage}}%)
-                <span class="cpm-flag" ng-if="data.target.rollup.uncovered">⚠ {{data.target.rollup.uncovered}} without any control</span>
-              </div>
-              <div class="cpm-tablewrap">
-                <table class="cpm-table">
-                  <thead><tr><th>Component</th><th>Type</th><th>Owner</th><th>Controls</th></tr></thead>
-                  <tbody>
-                    <tr ng-repeat="m in data.target.components track by m.id">
-                      <td>
-                        <a ng-if="m.canOpen" ng-href="?id=cpm&target={{m.id}}{{c.dbg()}}">{{m.name}}</a>
-                        <span ng-if="!m.canOpen">{{m.name}}</span>
-                      </td>
-                      <td>{{m.kind}}</td>
-                      <td>{{m.owner || '—'}}</td>
-                      <td>
-                        <span ng-if="!m.visible" class="cpm-sub">Managed by another owner</span>
-                        <span ng-if="m.visible && !m.total" class="cpm-flag">⚠ No control</span>
-                        <div ng-if="m.visible && m.total" class="cpm-mini">
-                          <div class="cpm-seg">
-                            <i class="ok" ng-style="{'flex-grow': m.approved - m.expiring}"></i>
-                            <i class="watch" ng-style="{'flex-grow': m.expiring}"></i>
-                            <i class="review" ng-style="{'flex-grow': m.awaiting}"></i>
-                            <i class="action" ng-style="{'flex-grow': m.rejected + m.expired}"></i>
-                            <i class="idle" ng-style="{'flex-grow': m.missing}"></i>
-                          </div>
-                          <small>{{m.approved}} of {{m.total}} approved</small>
-                        </div>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </section>
+          <!-- fixed bar 1: tabs, and the switch of "My services" -->
+          <div class="cpm-bar" ng-if="data.screen == 'home' && (data.isAdmin || c.tab == 'mine')">
+            <nav class="cpm-tabs" role="tablist" ng-if="data.isAdmin">
+              <button type="button" role="tab" ng-attr-aria-selected="{{c.tab == 'review'}}" ng-class="{active: c.tab == 'review'}" ng-click="c.go('review')">Review inbox <span class="cpm-count">{{data.team.kpi.review}}</span></button>
+              <button type="button" role="tab" ng-attr-aria-selected="{{c.tab == 'follow'}}" ng-class="{active: c.tab == 'follow'}" ng-click="c.go('follow')">Follow-up</button>
+              <button type="button" role="tab" ng-attr-aria-selected="{{c.tab == 'all'}}" ng-class="{active: c.tab == 'all'}" ng-click="c.go('all')">All services</button>
+              <button type="button" role="tab" ng-attr-aria-selected="{{c.tab == 'mine'}}" ng-class="{active: c.tab == 'mine'}" ng-click="c.go('mine')">My services</button>
+            </nav>
+            <div class="cpm-subtabs" ng-if="c.tab == 'mine'">
+              <button type="button" ng-class="{active: c.mineView == 'todo'}" ng-click="c.setMine('todo')">To do <span class="cpm-count">{{(data.myFollow.need.count || 0) + (data.myFollow.stale.count || 0)}}</span></button>
+              <button type="button" ng-class="{active: c.mineView == 'services'}" ng-click="c.setMine('services')">My services <span class="cpm-count idle">{{data.mine.kpi.targets || 0}}</span></button>
+            </div>
+          </div>
 
-            <div class="cpm-empty" ng-if="!data.target.controls.length">
-              No control of this service or CI is assigned to you. An admin assigns controls in the Control form, under <b>Targets</b>.
+          <!-- fixed bar 2: follow-up lists -->
+          <div class="cpm-bar cpm-tools" ng-if="data.screen == 'home' && c.showFollow()">
+            <span class="cpm-tools-title">{{c.ctx() == 'team' ? 'Follow-up · whole company' : 'To do · my own controls'}}</span>
+            <div class="cpm-chips">
+              <button type="button" ng-repeat="d in c.defs()" ng-class="{active: c.section() == d.key}" ng-click="c.pick(d.key)">{{d.label}} ({{c.countOf(d.key)}})</button>
+            </div>
+          </div>
+
+          <!-- fixed bar 2: filters and search of the services -->
+          <div class="cpm-bar cpm-tools" ng-if="data.screen == 'home' && c.showCards() && c.rows().length">
+            <div class="cpm-chips">
+              <button type="button" ng-repeat="f in c.filters" ng-class="{active: c.filter == f.key}" ng-click="c.filter = f.key">{{f.label}} ({{c.counts()[f.key]}})</button>
+            </div>
+            <div class="cpm-searchbar">
+              <input type="text" class="cpm-search" ng-model="c.q" ng-model-options="{debounce: 250}" placeholder="Search a service…" autocomplete="off" aria-label="Search a service">
+              <button type="button" class="cpm-btn plain" ng-if="c.q" ng-click="c.q = ''">Clear</button>
+            </div>
+          </div>
+
+          <!-- the only part that scrolls: the list -->
+          <main class="cpm-main">
+
+            <div ng-if="data.screen == 'home'">
+
+              <!-- review inbox -->
+              <section ng-if="data.isAdmin && c.tab == 'review'">
+                <div class="cpm-empty good" ng-if="!data.inbox.length">All clear: nothing is waiting for review.</div>
+
+                <article class="cpm-review" ng-repeat="e in data.inbox track by e.id">
+                  <div class="cpm-review-top">
+                    <div>
+                      <div class="cpm-review-title">{{e.control}} <span class="cpm-tag" ng-if="e.renewal">Renewal</span></div>
+                      <div class="cpm-sub">{{e.target}} · {{e.number}} · submitted by {{e.by}}</div>
+                    </div>
+                    <span class="cpm-age" ng-class="{late: e.ageDays > 5}">{{e.ageDays}} day{{e.ageDays == 1 ? '' : 's'}} waiting</span>
+                  </div>
+
+                  <p class="cpm-guide" ng-if="e.guidance"><b>Required:</b> {{e.guidance}}</p>
+
+                  <div class="cpm-files">
+                    <button type="button" class="cpm-filebtn" ng-repeat="f in e.files" ng-disabled="c.opening == f.id" ng-click="c.open(e.id, f)">
+                      {{f.isImage ? 'View' : 'Download'}} · {{f.name}}
+                    </button>
+                  </div>
+
+                  <div class="cpm-actions" ng-if="e.canReview">
+                    <button type="button" class="cpm-btn ok" ng-disabled="c.working[e.id]" ng-click="c.approve(e)">Approve</button>
+                    <button type="button" class="cpm-btn bad" ng-disabled="c.working[e.id]" ng-click="c.rejecting[e.id] = !c.rejecting[e.id]">Reject</button>
+                  </div>
+                  <div class="cpm-rejectbox" ng-if="c.rejecting[e.id]">
+                    <textarea ng-model="c.comment[e.id]" rows="2" placeholder="What is wrong? For example: the screenshot is blurry, or it does not show the date." aria-label="Reason for the rejection"></textarea>
+                    <button type="button" class="cpm-btn bad" ng-disabled="c.working[e.id] || !c.comment[e.id]" ng-click="c.reject(e)">Send rejection</button>
+                  </div>
+                  <div class="cpm-sub" ng-if="!e.canReview">You submitted this yourself, so another reviewer must decide.</div>
+                </article>
+              </section>
+
+              <!-- nothing assigned yet -->
+              <div class="cpm-empty" ng-if="c.tab == 'mine' && !data.mine.kpi.targets">You do not own any service or CI with controls yet.</div>
+
+              <!-- "Start here" -->
+              <section class="cpm-next clickable" ng-if="c.tab == 'mine' && c.mineView == 'todo' && c.nextAction()" ng-click="c.openTarget(c.nextAction().item.targetId)">
+                <div>
+                  <span class="cpm-eyebrow dark">Start here</span>
+                  <h4>{{c.nextAction().item.control}}</h4>
+                  <p>{{c.nextAction().item.target}} · {{c.nextAction().why}}</p>
+                </div>
+                <a class="cpm-btn brand" ng-href="?id=cpm&target={{c.nextAction().item.targetId}}{{c.dbg()}}" ng-click="$event.stopPropagation()">Open</a>
+              </section>
+
+              <!-- follow-up list -->
+              <section ng-if="c.showFollow() && (c.tab != 'mine' || data.mine.kpi.targets)">
+                <div class="cpm-empty good" ng-if="!c.items().length">{{c.emptyText()}}</div>
+
+                <div class="cpm-panel" ng-if="c.items().length">
+                  <div class="cpm-tablewrap">
+                    <table class="cpm-table">
+                      <thead>
+                        <tr>
+                          <th>Service or CI</th>
+                          <th ng-if="c.section() != 'uncovered'">Control</th>
+                          <th>Status</th>
+                          <th>Owner</th>
+                          <th>Detail</th>
+                          <th ng-if="c.section() == 'noOwner' || c.section() == 'uncovered'"></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr class="clickable" ng-repeat="r in c.items() track by $index" ng-click="c.openTarget(r.targetId)">
+                          <td><a ng-href="?id=cpm&target={{r.targetId}}{{c.dbg()}}" ng-click="$event.stopPropagation()">{{r.target}}</a></td>
+                          <td ng-if="c.section() != 'uncovered'"><b>{{r.ref}}</b> {{r.control}}</td>
+                          <td><span class="cpm-status st-{{r.status}}">{{c.label[r.status]}}</span></td>
+                          <td>
+                            <span ng-if="r.owner">{{r.owner}}</span>
+                            <span class="cpm-flag" ng-if="r.ownerFlag" title="{{r.ownerFlag}}">⚠ {{r.owner ? 'No owner in the CMDB' : 'No owner'}}</span>
+                          </td>
+                          <td ng-switch="c.section()">
+                            <span ng-switch-when="expiring">Valid until {{r.until}} · {{r.daysLeft}} day{{r.daysLeft == 1 ? '' : 's'}} left</span>
+                            <span ng-switch-when="stale">Expired on {{r.until}}</span>
+                            <span ng-switch-when="noOwner">{{r.ownerFlag}}</span>
+                            <span ng-switch-when="uncovered">{{r.note}} {{r.ownerFlag}}</span>
+                            <span ng-switch-default>{{r.status == 'rejected' ? 'The last evidence was rejected: upload it again.' : 'No evidence yet.'}}</span>
+                          </td>
+                          <td ng-if="c.section() == 'noOwner' || c.section() == 'uncovered'">
+                            <a ng-href="/cmdb_ci.do?sys_id={{r.targetId}}" target="_blank" ng-click="$event.stopPropagation()">Open in the CMDB</a>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                  <div class="cpm-sub" ng-if="c.more()">and {{c.more()}} more. The first 200 rows are listed.</div>
+                </div>
+              </section>
+
+              <!-- service cards: drawn page by page -->
+              <div class="cpm-sub" ng-if="c.showCards() && c.limited()">Only the 500 weakest are listed. Type a name to narrow down, the numbers on the right cover everything.</div>
+
+              <section class="cpm-grid" ng-if="c.showCards() && c.rows().length">
+                <a class="cpm-card risk-{{::r.risk}}" ng-repeat="r in c.visibleRows() track by r.key" ng-href="?id=cpm&target={{::r.id}}{{::c.dbg()}}">
+                  <div class="cpm-card-head">
+                    <svg viewBox="0 0 64 64" class="cpm-ring" aria-hidden="true">
+                      <circle class="track" cx="32" cy="32" r="26"></circle>
+                      <circle class="bar" cx="32" cy="32" r="26" transform="rotate(-90 32 32)" ng-attr-stroke-dasharray="{{::r.dash}} 163.36"></circle>
+                      <text x="32" y="37" text-anchor="middle">{{::r.pct}}</text>
+                    </svg>
+                    <div>
+                      <div class="cpm-card-title">{{::r.name}}</div>
+                      <span class="cpm-pill r-{{::r.risk}}">{{::c.riskLabel[r.risk]}}</span>
+                      <small class="cpm-kind">{{::r.kind}}</small>
+                    </div>
+                  </div>
+                  <div class="cpm-seg" title="{{::r.tip}}">
+                    <i class="ok" ng-style="::{'flex-grow': r.g.ok}"></i>
+                    <i class="watch" ng-style="::{'flex-grow': r.g.watch}"></i>
+                    <i class="review" ng-style="::{'flex-grow': r.g.review}"></i>
+                    <i class="action" ng-style="::{'flex-grow': r.g.action}"></i>
+                    <i class="idle" ng-style="::{'flex-grow': r.g.idle}"></i>
+                  </div>
+                  <div class="cpm-card-foot">
+                    <span>{{::r.approved}} of {{::r.total}} approved</span>
+                    <span ng-if="::r.todo">{{::r.todo}} to do</span>
+                  </div>
+                </a>
+              </section>
+              <div class="cpm-more" ng-if="c.showCards() && c.cardsLeft() > 0">
+                <button type="button" class="cpm-btn plain" ng-click="c.moreCards()">Show {{c.cardsLeft() > 24 ? 24 : c.cardsLeft()}} more ({{c.cardsLeft()}} left)</button>
+              </div>
+              <div class="cpm-empty" ng-if="c.showCards() && c.rows().length && !c.matching().length">No service or CI matches your search.</div>
             </div>
 
-            <article class="cpm-ctl st-{{ctl.status}}" ng-repeat="ctl in data.target.controls track by ctl.id">
-              <div class="cpm-ctl-top">
-                <div>
-                  <div class="cpm-ctl-title"><b>{{ctl.ref}}</b> {{ctl.name}}</div>
-                  <div class="cpm-sub">{{ctl.framework}}</div>
-                </div>
-                <div class="cpm-state st-{{ctl.status}}">{{c.label[ctl.status]}}<small ng-if="ctl.until && ctl.status != 'missing'"> · until {{ctl.until}}</small></div>
-              </div>
-              <p class="cpm-text" ng-if="ctl.description">{{ctl.description}}</p>
-              <p class="cpm-guide" ng-if="ctl.guidance"><b>What to provide:</b> {{ctl.guidance}}</p>
+            <!-- ====================== ONE CI OR SERVICE ====================== -->
+            <div ng-if="data.screen == 'target'">
+              <a class="cpm-back" ng-href="?id=cpm{{c.dbg()}}">← Back to the dashboard</a>
 
-              <div class="cpm-reject" ng-if="ctl.rejection"><b>Evidence insufficient, please re-upload.</b> {{ctl.rejection}}</div>
-              <div class="cpm-wait" ng-if="ctl.waiting">Submitted, waiting for the compliance team to approve or reject it.</div>
-
-              <label class="cpm-drop" tabindex="0" ng-if="ctl.canUpload">
-                <input type="file" class="cpm-picker" data-mapping="{{ctl.id}}" accept="image/*,application/pdf" multiple style="display:none">
-                <span>{{ctl.renew ? 'Renewal: drop the new evidence here' : 'Drop screenshots here'}}, paste (hover, then Ctrl+V) or click to browse</span>
-              </label>
-
-              <div class="cpm-staged" ng-if="ctl.canUpload && c.staged[ctl.id].length">
-                <div class="cpm-staged-title">Ready to submit: {{c.staged[ctl.id].length}} file{{c.staged[ctl.id].length == 1 ? '' : 's'}}</div>
-                <div class="cpm-staged-list">
-                  <div class="cpm-chip" ng-repeat="s in c.staged[ctl.id]">
-                    <img ng-if="s.isImage" ng-src="{{s.dataUrl}}" alt="">
-                    <span class="cpm-chip-pdf" ng-if="!s.isImage">PDF</span>
-                    <div><b>{{s.name}}</b><small>{{s.size}}</small></div>
-                    <button type="button" title="Remove" ng-disabled="c.busy[ctl.id]" ng-click="c.unstage(ctl.id, $index)">×</button>
+              <header class="cpm-head risk-{{data.target.summary.risk}}">
+                <svg viewBox="0 0 64 64" class="cpm-ring big" aria-hidden="true">
+                  <circle class="track" cx="32" cy="32" r="26"></circle>
+                  <circle class="bar" cx="32" cy="32" r="26" transform="rotate(-90 32 32)"
+                          ng-attr-stroke-dasharray="{{data.target.summary.coverage * 1.6336}} 163.36"></circle>
+                  <text x="32" y="37" text-anchor="middle">{{data.target.summary.total ? data.target.summary.coverage + '%' : '–'}}</text>
+                </svg>
+                <div class="cpm-head-main">
+                  <h3>{{data.target.name}} <span class="cpm-tag" ng-if="data.target.kind">{{data.target.kind}}</span></h3>
+                  <div class="cpm-sub">Owner in the CMDB: {{data.target.owner || 'not set'}}</div>
+                  <div class="cpm-partof" ng-if="data.target.partOf.length">
+                    Part of:
+                    <span ng-repeat="p in data.target.partOf">
+                      <a ng-if="p.canOpen" ng-href="?id=cpm&target={{p.id}}{{c.dbg()}}">{{p.name}}</a><span ng-if="!p.canOpen">{{p.name}}</span><span ng-if="!$last">, </span>
+                    </span>
+                  </div>
+                  <div class="cpm-seg">
+                    <i class="ok" ng-style="{'flex-grow': data.target.summary.approved - data.target.summary.expiring}"></i>
+                    <i class="watch" ng-style="{'flex-grow': data.target.summary.expiring}"></i>
+                    <i class="review" ng-style="{'flex-grow': data.target.summary.awaiting}"></i>
+                    <i class="action" ng-style="{'flex-grow': data.target.summary.rejected + data.target.summary.expired}"></i>
+                    <i class="idle" ng-style="{'flex-grow': data.target.summary.missing}"></i>
                   </div>
                 </div>
-                <div class="cpm-staged-actions">
-                  <button class="cpm-btn ok" ng-disabled="c.busy[ctl.id]" ng-click="c.submit(ctl)">{{c.busy[ctl.id] ? c.progress[ctl.id] : 'Submit for review'}}</button>
-                  <button class="cpm-btn plain" ng-disabled="c.busy[ctl.id]" ng-click="c.clearStaged(ctl.id)">Clear</button>
+                <div class="cpm-head-stats">
+                  <div><b>{{data.target.summary.approved}}</b><span>approved</span></div>
+                  <div><b>{{data.target.summary.awaiting}}</b><span>in review</span></div>
+                  <div><b>{{data.target.summary.rejected + data.target.summary.expired}}</b><span>rejected or stale</span></div>
+                  <div><b>{{data.target.summary.missing}}</b><span>missing</span></div>
                 </div>
+              </header>
+
+              <section class="cpm-panel" ng-if="data.target.components.length">
+                <h4>Service composition</h4>
+                <p class="cpm-sub">
+                  According to the CMDB relationships, this service is made of {{data.target.rollup.components}} component{{data.target.rollup.components == 1 ? '' : 's'}}.
+                  Every approval stores the list that was valid on that day.
+                </p>
+                <div class="cpm-rollup" ng-if="data.target.rollup.total">
+                  Components together: <b>{{data.target.rollup.approved}} of {{data.target.rollup.total}}</b> controls approved ({{data.target.rollup.coverage}}%)
+                  <span class="cpm-flag" ng-if="data.target.rollup.uncovered">⚠ {{data.target.rollup.uncovered}} without any control</span>
+                </div>
+                <div class="cpm-tablewrap">
+                  <table class="cpm-table">
+                    <thead><tr><th>Component</th><th>Type</th><th>Owner</th><th>Controls</th></tr></thead>
+                    <tbody>
+                      <tr ng-repeat="m in data.target.components track by m.id">
+                        <td>
+                          <a ng-if="m.canOpen" ng-href="?id=cpm&target={{m.id}}{{c.dbg()}}">{{m.name}}</a>
+                          <span ng-if="!m.canOpen">{{m.name}}</span>
+                        </td>
+                        <td>{{m.kind}}</td>
+                        <td>{{m.owner || '—'}}</td>
+                        <td>
+                          <span ng-if="!m.visible" class="cpm-sub">Managed by another owner</span>
+                          <span ng-if="m.visible && !m.total" class="cpm-flag">⚠ No control</span>
+                          <div ng-if="m.visible && m.total" class="cpm-mini">
+                            <div class="cpm-seg">
+                              <i class="ok" ng-style="{'flex-grow': m.approved - m.expiring}"></i>
+                              <i class="watch" ng-style="{'flex-grow': m.expiring}"></i>
+                              <i class="review" ng-style="{'flex-grow': m.awaiting}"></i>
+                              <i class="action" ng-style="{'flex-grow': m.rejected + m.expired}"></i>
+                              <i class="idle" ng-style="{'flex-grow': m.missing}"></i>
+                            </div>
+                            <small>{{m.approved}} of {{m.total}} approved</small>
+                          </div>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+
+              <div class="cpm-empty" ng-if="!data.target.controls.length">
+                No control of this service or CI is assigned to you. An admin assigns controls in the Control form, under <b>Targets</b>.
               </div>
-              <div class="cpm-error" ng-if="c.msg[ctl.id]">{{c.msg[ctl.id]}}</div>
 
-              <div class="cpm-why" ng-if="!ctl.canUpload && ctl.why">{{ctl.why}}</div>
-
-              <div class="cpm-debug" ng-if="data.debug">state={{ctl.status}} · mapping owner={{ctl.ownerId || 'EMPTY'}} · you={{data.me}} · isAdmin={{data.isAdmin}} · waiting={{ctl.waiting}} · canUpload={{ctl.canUpload}}</div>
-
-              <div class="cpm-ev" ng-repeat="e in ctl.evidence track by e.id">
-                <div class="cpm-ev-line">
-                  <b>{{e.number}}</b> <span class="cpm-tag st-{{e.status}}">{{e.label}}</span>
-                  {{e.on}} · by {{e.by}}
-                  <span ng-if="e.reviewedBy"> · reviewed by {{e.reviewedBy}}</span>
-                  <span ng-if="e.until"> · valid until {{e.until}}</span>
-                  <span class="cpm-seal" ng-if="e.integrity == 'ok'">✓ Integrity sealed</span>
-                  <span class="cpm-seal bad" ng-if="e.integrity == 'changed'">⚠ Changed after approval</span>
+              <article class="cpm-ctl st-{{ctl.status}}" ng-repeat="ctl in data.target.controls track by ctl.id">
+                <div class="cpm-ctl-top">
+                  <div>
+                    <div class="cpm-ctl-title"><b>{{ctl.ref}}</b> {{ctl.name}}</div>
+                    <div class="cpm-sub">{{ctl.framework}}</div>
+                  </div>
+                  <div class="cpm-state st-{{ctl.status}}">{{c.label[ctl.status]}}<small ng-if="ctl.until && ctl.status != 'missing'"> · until {{ctl.until}}</small></div>
                 </div>
-                <details class="cpm-scope" ng-if="e.scope">
-                  <summary>Scope when this was approved</summary>
-                  <p>{{e.scope}}</p>
-                </details>
-                <div class="cpm-files">
-                  <button class="cpm-filebtn" ng-repeat="f in e.files" ng-disabled="c.opening == f.id" ng-click="c.open(e.id, f)">
-                    {{f.isImage ? 'View' : 'Download'}} · {{f.name}}
-                  </button>
+                <p class="cpm-text" ng-if="ctl.description">{{ctl.description}}</p>
+                <p class="cpm-guide" ng-if="ctl.guidance"><b>What to provide:</b> {{ctl.guidance}}</p>
+
+                <div class="cpm-reject" ng-if="ctl.rejection"><b>Evidence insufficient, please re-upload.</b> {{ctl.rejection}}</div>
+                <div class="cpm-wait" ng-if="ctl.waiting">Submitted, waiting for the compliance team to approve or reject it.</div>
+
+                <label class="cpm-drop" tabindex="0" ng-if="ctl.canUpload">
+                  <input type="file" class="cpm-picker" data-mapping="{{ctl.id}}" accept="image/*,application/pdf" multiple style="display:none">
+                  <span>{{ctl.renew ? 'Renewal: drop the new evidence here' : 'Drop screenshots here'}}, paste (hover, then Ctrl+V) or click to browse</span>
+                </label>
+
+                <div class="cpm-staged" ng-if="ctl.canUpload && c.staged[ctl.id].length">
+                  <div class="cpm-staged-title">Ready to submit: {{c.staged[ctl.id].length}} file{{c.staged[ctl.id].length == 1 ? '' : 's'}}</div>
+                  <div class="cpm-staged-list">
+                    <div class="cpm-chip" ng-repeat="s in c.staged[ctl.id]">
+                      <img ng-if="s.isImage" ng-src="{{s.dataUrl}}" alt="">
+                      <span class="cpm-chip-pdf" ng-if="!s.isImage">PDF</span>
+                      <div><b>{{s.name}}</b><small>{{s.size}}</small></div>
+                      <button type="button" title="Remove" aria-label="Remove {{s.name}}" ng-disabled="c.busy[ctl.id]" ng-click="c.unstage(ctl.id, $index)">×</button>
+                    </div>
+                  </div>
+                  <div class="cpm-staged-actions">
+                    <button type="button" class="cpm-btn ok" ng-disabled="c.busy[ctl.id]" ng-click="c.submit(ctl)">{{c.busy[ctl.id] ? c.progress[ctl.id] : 'Submit for review'}}</button>
+                    <button type="button" class="cpm-btn plain" ng-disabled="c.busy[ctl.id]" ng-click="c.clearStaged(ctl.id)">Clear</button>
+                  </div>
                 </div>
-              </div>
-            </article>
-          </div>
-        </main>
+                <div class="cpm-error" role="alert" ng-if="c.msg[ctl.id]">{{c.msg[ctl.id]}}</div>
+
+                <div class="cpm-why" ng-if="!ctl.canUpload && ctl.why">{{ctl.why}}</div>
+
+                <div class="cpm-debug" ng-if="data.debug">state={{ctl.status}} · mapping owner={{ctl.ownerId || 'EMPTY'}} · you={{data.me}} · isAdmin={{data.isAdmin}} · waiting={{ctl.waiting}} · canUpload={{ctl.canUpload}}</div>
+
+                <div class="cpm-ev" ng-repeat="e in ctl.evidence track by e.id">
+                  <div class="cpm-ev-line">
+                    <b>{{e.number}}</b> <span class="cpm-tag st-{{e.status}}">{{e.label}}</span>
+                    {{e.on}} · by {{e.by}}
+                    <span ng-if="e.reviewedBy"> · reviewed by {{e.reviewedBy}}</span>
+                    <span ng-if="e.until"> · valid until {{e.until}}</span>
+                    <span class="cpm-seal" ng-if="e.integrity == 'ok'">✓ Integrity sealed</span>
+                    <span class="cpm-seal bad" ng-if="e.integrity == 'changed'">⚠ Changed after approval</span>
+                  </div>
+                  <details class="cpm-scope" ng-if="e.scope">
+                    <summary>Scope when this was approved</summary>
+                    <p>{{e.scope}}</p>
+                  </details>
+                  <div class="cpm-files">
+                    <button type="button" class="cpm-filebtn" ng-repeat="f in e.files" ng-disabled="c.opening == f.id" ng-click="c.open(e.id, f)">
+                      {{f.isImage ? 'View' : 'Download'}} · {{f.name}}
+                    </button>
+                  </div>
+                </div>
+              </article>
+            </div>
+          </main>
+        </section>
 
         <!-- ========== right: all the stats ========== -->
-        <aside class="cpm-side">
+        <aside class="cpm-side" aria-label="Statistics">
 
           <section class="cpm-side-card">
             <h4>At a glance <small>{{data.isAdmin ? 'whole company' : 'your services'}}</small></h4>
 
             <div class="cpm-kpis" ng-if="data.isAdmin">
               <div class="cpm-kpi ok"><i aria-hidden="true">✓</i><b>{{data.company.covered}}/{{data.company.total}}</b><span>Services covered</span></div>
-              <div class="cpm-kpi review clickable" ng-click="c.go('review')"><i aria-hidden="true">◉</i><b>{{data.team.kpi.review}}</b><span>To review</span></div>
-              <div class="cpm-kpi action clickable" ng-click="c.go('follow', 'need')"><i aria-hidden="true">●</i><b>{{data.follow.need.count}}</b><span>Missing or rejected</span></div>
-              <div class="cpm-kpi watch clickable" ng-click="c.go('follow', 'expiring')"><i aria-hidden="true">⏳</i><b>{{data.follow.expiring.count}}</b><span>Expiring soon</span></div>
-              <div class="cpm-kpi action clickable" ng-click="c.go('follow', 'stale')"><i aria-hidden="true">⚠</i><b>{{data.follow.stale.count}}</b><span>Stale (expired)</span></div>
-              <div class="cpm-kpi idle clickable" ng-click="c.go('follow', 'noOwner')"><i aria-hidden="true">?</i><b>{{data.follow.noOwner.count}}</b><span>Without owner</span></div>
-              <div class="cpm-kpi idle clickable" ng-click="c.go('follow', 'uncovered')"><i aria-hidden="true">○</i><b>{{data.follow.uncovered.count}}</b><span>Services not covered</span></div>
+              <button type="button" class="cpm-kpi review clickable" ng-click="c.go('review')"><i aria-hidden="true">◉</i><b>{{data.team.kpi.review}}</b><span>To review</span></button>
+              <button type="button" class="cpm-kpi action clickable" ng-click="c.go('follow', 'need')"><i aria-hidden="true">●</i><b>{{data.follow.need.count}}</b><span>Missing or rejected</span></button>
+              <button type="button" class="cpm-kpi watch clickable" ng-click="c.go('follow', 'expiring')"><i aria-hidden="true">⏳</i><b>{{data.follow.expiring.count}}</b><span>Expiring soon</span></button>
+              <button type="button" class="cpm-kpi action clickable" ng-click="c.go('follow', 'stale')"><i aria-hidden="true">⚠</i><b>{{data.follow.stale.count}}</b><span>Stale (expired)</span></button>
+              <button type="button" class="cpm-kpi idle clickable" ng-click="c.go('follow', 'noOwner')"><i aria-hidden="true">?</i><b>{{data.follow.noOwner.count}}</b><span>Without owner</span></button>
+              <button type="button" class="cpm-kpi idle clickable" ng-click="c.go('follow', 'uncovered')"><i aria-hidden="true">○</i><b>{{data.follow.uncovered.count}}</b><span>Services not covered</span></button>
             </div>
 
             <div class="cpm-kpis" ng-if="!data.isAdmin && data.mine.kpi.targets">
               <div class="cpm-kpi ok"><i aria-hidden="true">✓</i><b>{{data.mine.kpi.covered}}/{{data.mine.kpi.targets}}</b><span>Services covered</span></div>
-              <div class="cpm-kpi action clickable" ng-click="c.go('mine', 'need')"><i aria-hidden="true">●</i><b>{{data.myFollow.need.count}}</b><span>Need evidence</span></div>
-              <div class="cpm-kpi watch clickable" ng-click="c.go('mine', 'expiring')"><i aria-hidden="true">⏳</i><b>{{data.myFollow.expiring.count}}</b><span>Expiring soon</span></div>
-              <div class="cpm-kpi action clickable" ng-click="c.go('mine', 'stale')"><i aria-hidden="true">⚠</i><b>{{data.myFollow.stale.count}}</b><span>Stale (expired)</span></div>
+              <button type="button" class="cpm-kpi action clickable" ng-click="c.go('mine', 'need')"><i aria-hidden="true">●</i><b>{{data.myFollow.need.count}}</b><span>Need evidence</span></button>
+              <button type="button" class="cpm-kpi watch clickable" ng-click="c.go('mine', 'expiring')"><i aria-hidden="true">⏳</i><b>{{data.myFollow.expiring.count}}</b><span>Expiring soon</span></button>
+              <button type="button" class="cpm-kpi action clickable" ng-click="c.go('mine', 'stale')"><i aria-hidden="true">⚠</i><b>{{data.myFollow.stale.count}}</b><span>Stale (expired)</span></button>
               <div class="cpm-kpi review"><i aria-hidden="true">◉</i><b>{{data.mine.kpi.states.awaiting}}</b><span>In review</span></div>
             </div>
             <div class="cpm-sub" ng-if="!data.isAdmin && !data.mine.kpi.targets">Nothing is assigned to you yet.</div>
@@ -1630,7 +1649,7 @@
           <section class="cpm-side-card" ng-if="c.donut().total">
             <h4>Controls by status</h4>
             <div class="cpm-donut-wrap">
-              <div class="cpm-donut">
+              <div class="cpm-donut" role="img" aria-label="Controls by status">
                 <svg viewBox="0 0 64 64">
                   <circle class="track" cx="32" cy="32" r="26"></circle>
                   <circle ng-repeat="s in c.donut().segs" ng-if="s.n" class="seg {{s.tone}}" cx="32" cy="32" r="26" transform="rotate(-90 32 32)"
@@ -1676,7 +1695,7 @@
     </div>
   </div>
 
-  <div class="cpm-lightbox" ng-if="c.preview" ng-click="c.preview = null">
+  <div class="cpm-lightbox" role="dialog" aria-modal="true" aria-label="Image viewer" ng-if="c.preview" ng-click="c.preview = null">
     <img ng-src="{{c.preview.src}}" alt="{{c.preview.name}}">
     <div>{{c.preview.name}} · click or press Esc to close</div>
   </div>
