@@ -5,7 +5,7 @@
   // Everything that happens in the browser: layout, tabs, lists, search, review buttons, uploads. No Link function.
   var c = this;
   $scope.c = c;
-  c.build = '20';   // must match the "server build" at the bottom of the page
+  c.build = '21';   // must match the "server build" at the bottom of the page
 
   var BLEED = true;   // true: the dashboard uses the whole window width. false: it stays inside the portal container
   var MAX_BYTES = 3 * 1024 * 1024;
@@ -1228,14 +1228,14 @@ button.cpm-kpi { font: inherit; color: inherit; text-align: left; width: 100%; d
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2026-10-22 15:09:33</sys_created_on>
         <sys_id>1ea1151e73c81710a621f2024ab8b70c</sys_id>
-        <sys_mod_count>82</sys_mod_count>
+        <sys_mod_count>83</sys_mod_count>
         <sys_name>CPM Compliance</sys_name>
         <sys_package display_value="Compliance Posture Mapper" source="x_1929776_compli_0">f7756d0a738c9310a621f2024ab8b707</sys_package>
         <sys_policy/>
         <sys_scope display_value="Compliance Posture Mapper">f7756d0a738c9310a621f2024ab8b707</sys_scope>
         <sys_update_name>sp_widget_1ea1151e73c81710a621f2024ab8b70c</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
-        <sys_updated_on>2026-11-04 22:58:52</sys_updated_on>
+        <sys_updated_on>2026-11-04 23:26:07</sys_updated_on>
         <template><![CDATA[<div class="cpm">
 
   <div class="cpm-alert" ng-if="!c.build">
