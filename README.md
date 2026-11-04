@@ -85,16 +85,6 @@ The nightly job runs five isolated steps: sync mappings with their controls, ref
 - Users in different time zones can see an expiry one day apart around midnight.
 - The interface is in English.
 
-## Roadmap
-
-- [ ] HMAC seal with a managed secret
-- [ ] Translations through UI Messages
-- [ ] Evidence retention policy
-- [ ] Export of the coverage report to PDF
-
-## License
-
-MIT. See `LICENSE`.
 
 ## Disclaimer
 
