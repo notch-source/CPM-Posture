@@ -9,56 +9,117 @@
         <mobile_callable>false</mobile_callable>
         <name>CPMUtil</name>
         <sandbox_callable>false</sandbox_callable>
-        <script><![CDATA[// Role: shared helpers (settings, dates, traffic light, owner lookup). Every other Script Include uses this one.
-var CPMUtil = Class.create();
+        <script><![CDATA[var CPMUtil = Class.create();
 CPMUtil.prototype = {
-  initialize: function() {},
-
-  // Role: reads an application setting (system property) with a default value.
-  prop: function(name, fallback) {
-    return gs.getProperty('x_1929776_compli_0.' + name, fallback);
+  initialize: function() {
+    this.K = new CPMConst();
   },
 
-  // Role: same as prop(), but returns a number.
+  // application setting (system property)
+  prop: function(name, fallback) {
+    return gs.getProperty(this.K.PREFIX + '.' + name, fallback);
+  },
+
   intProp: function(name, fallback) {
     var value = parseInt(this.prop(name, ''), 10);
     return isNaN(value) ? fallback : value;
   },
 
-  // Role: today's date as YYYY-MM-DD in the instance time zone.
+  // true for a checked boolean field value
+  on: function(value) {
+    return value === true || value === 1 || value === '1' || value === 'true';
+  },
+
+  // today as YYYY-MM-DD
   today: function() {
     return new GlideDateTime().getLocalDate().getValue();
   },
 
-  // Role: adds (or subtracts) days to a YYYY-MM-DD date.
+  // adds days to a YYYY-MM-DD date (UTC, no time zone drift)
   addDays: function(date, days) {
     var gdt = new GlideDateTime(date + ' 00:00:00');
     gdt.addDaysUTC(days);
-    return gdt.getDate().getValue();
+    return gdt.getValue().substring(0, 10);
   },
 
-  // Role: number of days between two YYYY-MM-DD dates.
   daysBetween: function(from, to) {
     var start = new GlideDateTime(from + ' 00:00:00').getNumericValue();
     var end = new GlideDateTime(to + ' 00:00:00').getNumericValue();
     return Math.round((end - start) / 86400000);
   },
 
-  // Role: the last day on which approved evidence counts as "expiring soon".
+  // last day counted as "expiring soon"
   horizon: function() {
     return this.addDays(this.today(), this.intProp('warning_days', 30));
   },
 
-  // Role: turns a coverage percentage into a traffic light, using the two thresholds of the settings.
-  riskFor: function(total, coverage) {
-    if (!total) return 'not_assessed';
-    if (coverage >= this.intProp('green_min', 80)) return 'green';
-    return coverage >= this.intProp('yellow_min', 50) ? 'yellow' : 'red';
+  // the state people see today, whatever the nightly job has done
+  effective: function(state, validUntil) {
+    if (state != this.K.STATE.APPROVED || !validUntil) return state;
+    if (validUntil < this.today()) return this.K.STATE.EXPIRED;
+    return validUntil <= this.horizon() ? this.K.VIEW.EXPIRING : this.K.STATE.APPROVED;
   },
 
-  // Role: finds who is accountable for a CI: its owner, else its manager, else the fallback user.
+  // traffic light from the share of approved controls
+  riskFor: function(total, coverage) {
+    var risk = this.K.RISK;
+    if (!total) return risk.NOT_ASSESSED;
+    if (coverage >= this.intProp('green_min', 80)) return risk.GREEN;
+    return coverage >= this.intProp('yellow_min', 50) ? risk.YELLOW : risk.RED;
+  },
+
+  // owner of a CI: owned by, else managed by, else the fallback user
   ownerOf: function(ci) {
     return ci.getValue('owned_by') || ci.getValue('managed_by') || this.prop('fallback_owner', '');
+  },
+
+  // setup problems, shown to the compliance team: a missing field, a Script Include that is not up to date,
+  // or a nightly job that did not run
+  healthProblems: function() {
+    var T = this.K.TABLE;
+    var problems = [];
+    var fields = {};
+    fields[T.CONTROL] = ['reference', 'name', 'description', 'guidance', 'framework', 'targets', 'include_components', 'active', 'validity_days'];
+    fields[T.MAPPING] = ['number', 'control', 'target', 'owner', 'via_service', 'state', 'valid_until', 'active'];
+    fields[T.EVIDENCE] = ['number', 'mapping', 'status', 'submitted_by', 'submitted_on', 'review_by', 'reviewed_on', 'valid_until', 'scope_snapshot', 'seal', 'review_comment'];
+    Object.keys(fields).forEach(function(table) {
+      var gr = new GlideRecord(table);
+      fields[table].forEach(function(field) {
+        if (!gr.isValidField(field)) problems.push('The table ' + table + ' has no field named "' + field + '".');
+      });
+    });
+
+    // newest functions each Script Include must have
+    var needs = [
+      ['CPMStats', function() { return new CPMStats(); }, ['approvals', 'followCounts', 'serviceCoverage', 'frameworks']],
+      ['CPMNotify', function() { return new CPMNotify(); }, ['teamDigest', 'assigned', 'ownerDigest']],
+      ['CPMMapping', function() { return new CPMMapping(); }, ['syncAllControls', 'describeTargets', 'refreshOwners']],
+      ['CPMReview', function() { return new CPMReview(); }, ['stampReviewer', 'verify']],
+      ['CPMLookup', function() { return new CPMLookup(); }, ['namesFromMappings', 'ownersOf']],
+      ['CPMAccess', function() { return new CPMAccess(); }, ['isAdmin', 'canViewTarget']],
+      ['CPMEvidence', function() { return new CPMEvidence(); }, ['addFile', 'submit', 'getFile']]
+    ];
+    needs.forEach(function(need) {
+      try {
+        var instance = need[1]();
+        need[2].forEach(function(method) {
+          if (typeof instance[method] !== 'function') problems.push(need[0] + ' is out of date (no ' + method + '): replace the whole Script Include.');
+        });
+      } catch (e) {
+        problems.push(need[0] + ' is missing or broken: ' + e.message);
+      }
+    });
+
+    // the nightly job brings states up to date: approved controls long past their end date mean it did not run
+    var late = new GlideAggregate(T.MAPPING);
+    late.addQuery('active', true);
+    late.addQuery('state', this.K.STATE.APPROVED);
+    late.addQuery('valid_until', '<', this.addDays(this.today(), -1));
+    late.addAggregate('COUNT');
+    late.query();
+    var stale = late.next() ? parseInt(late.getAggregate('COUNT'), 10) : 0;
+    if (stale) problems.push(stale + ' control(s) are still marked approved after their end date: the nightly job did not run or failed. Check the scheduled job and System Log > All for "[CPM]".');
+    return problems;
   },
 
   type: 'CPMUtil'
@@ -67,13 +128,13 @@ CPMUtil.prototype = {
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2026-10-21 22:48:43</sys_created_on>
         <sys_id>0641b5467300d310a621f2024ab8b746</sys_id>
-        <sys_mod_count>15</sys_mod_count>
+        <sys_mod_count>24</sys_mod_count>
         <sys_name>CPMUtil</sys_name>
         <sys_package display_value="Compliance Posture Mapper" source="x_1929776_compli_0">f7756d0a738c9310a621f2024ab8b707</sys_package>
         <sys_policy>read</sys_policy>
         <sys_scope display_value="Compliance Posture Mapper">f7756d0a738c9310a621f2024ab8b707</sys_scope>
         <sys_update_name>sys_script_include_0641b5467300d310a621f2024ab8b746</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
-        <sys_updated_on>2026-10-27 16:47:40</sys_updated_on>
+        <sys_updated_on>2026-11-04 10:18:55</sys_updated_on>
     </sys_script_include>
 </record_update>

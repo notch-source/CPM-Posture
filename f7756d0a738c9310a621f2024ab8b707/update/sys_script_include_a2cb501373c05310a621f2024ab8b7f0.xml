@@ -9,29 +9,267 @@
         <mobile_callable>false</mobile_callable>
         <name>CPMStats</name>
         <sandbox_callable>false</sandbox_callable>
-        <script><![CDATA[// Role: computes everything the portal displays, in a few aggregate queries, so the widget stays small.
-//       Every query that lists data for a user applies the access rules of CPMAccess explicitly.
-var CPMStats = Class.create();
+        <script><![CDATA[var CPMStats = Class.create();
 CPMStats.prototype = {
-  VERSION: '10',    // shown at the bottom of the page: if it is not 10, this Script Include was not replaced
-  MAX_CARDS: 500,   // a card list shows up to 500 cards (the weakest first); the headline numbers always cover everything
-  RISK_ORDER: { red: 0, yellow: 1, green: 2, not_assessed: 3 },
-  TODO_ORDER: { rejected: 0, expired: 1, missing: 2, expiring: 3 },
+  MAX_CARDS: 500,   // cards shown (weakest first); the headline numbers cover everything
 
   initialize: function() {
+    this.K = new CPMConst();
+    this.T = this.K.TABLE;
+    this.S = this.K.STATE;
+    this.ST = this.K.STATUS;
+    this.R = this.K.RISK;
+    this.V = this.K.VIEW;
+    this.VERSION = this.K.VERSION;
     this.util = new CPMUtil();
     this.access = new CPMAccess();
     this.evidence = new CPMEvidence();
+    this.lookup = new CPMLookup();
+    this.msg = new CPMMsg();
+    this.RISK_ORDER = this._rank([this.R.RED, this.R.YELLOW, this.R.GREEN, this.R.NOT_ASSESSED]);
+    this.TODO_ORDER = this._rank([this.S.REJECTED, this.S.EXPIRED, this.S.MISSING, this.V.EXPIRING]);
+  },
+
+  // ---------- Counting ----------
+
+  // counts controls per key (target or control) and state, with the date rules applied.
+  // "ids" limits the keys, "ownerId" limits to one owner
+  _countBy: function(keyField, ids, ownerId) {
+    var self = this;
+    var rows = {};
+    var today = this.util.today();
+    var horizon = this.util.horizon();
+
+    var shared = function(ga) {
+      ga.addQuery('active', true);
+      if (ids) ga.addQuery(keyField, 'IN', ids.join(','));
+      if (ownerId) ga.addQuery('owner', ownerId);
+      ga.groupBy(keyField);
+      ga.addAggregate('COUNT');
+      return ga;
+    };
+    var read = function(ga, apply) {
+      ga.query();
+      while (ga.next()) {
+        var id = ga.getValue(keyField);
+        rows[id] = rows[id] || self._blank(id);
+        apply(rows[id], parseInt(ga.getAggregate('COUNT'), 10), ga);
+      }
+    };
+
+    var byState = shared(new GlideAggregate(this.T.MAPPING));
+    byState.groupBy('state');
+    read(byState, function(row, n, ga) {
+      var key = ga.getValue('state');
+      if (row[key] === undefined) key = self.S.MISSING;
+      row[key] += n;
+    });
+
+    // approved but past the date: expired
+    var overdue = shared(new GlideAggregate(this.T.MAPPING));
+    overdue.addQuery('state', this.S.APPROVED);
+    overdue.addQuery('valid_until', '<', today);
+    read(overdue, function(row, n) { row.approved -= n; row.expired += n; });
+
+    // approved and ending soon: also counted as expiring
+    var soon = shared(new GlideAggregate(this.T.MAPPING));
+    soon.addQuery('state', this.S.APPROVED);
+    soon.addQuery('valid_until', '>=', today);
+    soon.addQuery('valid_until', '<=', horizon);
+    read(soon, function(row, n) { row.expiring += n; });
+
+    return rows;
+  },
+
+  _blank: function(id) {
+    var row = { id: id, name: '', kind: '', expiring: 0 };
+    for (var key in this.S) row[this.S[key]] = 0;
+    return row;
+  },
+
+  // adds total, share of approved controls and traffic light
+  _finish: function(row) {
+    row.total = row.approved + row.awaiting + row.rejected + row.missing + row.expired;
+    row.coverage = row.total ? Math.round(row.approved / row.total * 100) : 0;
+    row.risk = this.util.riskFor(row.total, row.coverage);
+    return row;
+  },
+
+  // headline numbers. A target is covered when it has at least one valid approved control
+    
+  _kpi: function(rows) {
+    var k = { targets: rows.length, covered: 0, coveredPct: 0,
+              states: { approved: 0, expiring: 0, awaiting: 0, rejected: 0, expired: 0, missing: 0 } };
+    rows.forEach(function(r) {
+      if (r.approved > 0) k.covered++;
+      for (var key in k.states) k.states[key] += r[key];
+    });
+    k.coveredPct = k.targets ? Math.round(k.covered / k.targets * 100) : 0;
+    return k;
+  },
+
+  // ---------- Company coverage ----------
+
+  // services in scope, and how many have at least one valid approved evidence
+  serviceCoverage: function() {
+    var scope = this.util.prop('service_scope', '');
+    var total = this._countServices(scope);
+    var covered = Object.keys(this._servicesAmong(this._coveredTargets(), scope)).length;
+    return { total: total, covered: covered, coveredPct: total ? Math.round(covered / total * 100) : 0 };
+  },
+
+    // decisions of the last 30 days: counts, approval rate, average time to decide, oldest waiting submission.
+  // "byUser" limits it to the submissions of one person
+  approvals: function(byUser) {
+    var base = byUser ? 'submitted_by=' + byUser + '^' : '';
+    var since = gs.daysAgoStart(30);
+    var ST = this.ST;
+    var out = {
+      approved: this.count(this.T.EVIDENCE, base + 'statusIN' + this.K.list(ST.APPROVED, ST.SUPERSEDED) + '^reviewed_on>=' + since),
+      rejected: this.count(this.T.EVIDENCE, base + 'status=' + ST.REJECTED + '^reviewed_on>=' + since),
+      pending: this.count(this.T.EVIDENCE, base + 'status=' + ST.PENDING),
+      ratePct: 0, avgDays: 0, oldestDays: 0
+    };
+    var decided = out.approved + out.rejected;
+    out.ratePct = decided ? Math.round(out.approved / decided * 100) : 0;
+
+    var sum = 0;
+    var n = 0;
+    var gr = this._gr(this.T.EVIDENCE);
+    gr.addEncodedQuery(base + 'statusIN' + this.K.list(ST.APPROVED, ST.REJECTED, ST.SUPERSEDED) + '^reviewed_on>=' + since);
+    gr.setLimit(500);
+    gr.query();
+    while (gr.next()) {
+      var from = gr.getValue('submitted_on');
+      var to = gr.getValue('reviewed_on');
+      if (!from || !to) continue;
+      sum += new GlideDateTime(to).getNumericValue() - new GlideDateTime(from).getNumericValue();
+      n++;
+    }
+    out.avgDays = n ? Math.round(sum / n / 8640000) / 10 : 0;   // days, one decimal
+
+    var oldest = this._gr(this.T.EVIDENCE);
+    oldest.addEncodedQuery(base + 'status=' + ST.PENDING);
+    oldest.orderBy('submitted_on');
+    oldest.setLimit(1);
+    oldest.query();
+    if (oldest.next() && oldest.getValue('submitted_on'))
+      out.oldestDays = this.util.daysBetween(oldest.getValue('submitted_on').substring(0, 10), this.util.today());
+    return out;
+  },
+
+  // per framework: services covered by at least one approved evidence of that framework
+  frameworks: function() {
+    var scope = this.util.prop('service_scope', '');
+    var total = this._countServices(scope);
+    var all = this._pairs(false);
+    var approved = this._pairs(true);
+    var inScope = this._servicesAmong(approved.map(function(p) { return p.target; }), scope);
+    var labels = this.lookup.byIds(this.T.CONTROL, all.map(function(p) { return p.control; }), [], ['framework']);
+    var out = {};
+    var slot = function(controlId) {
+      var name = (labels[controlId] && labels[controlId].framework_dv) || 'Other';
+      return out[name] = out[name] || { name: name, services: total, covered: 0, coverage: 0, seen: {} };
+    };
+    all.forEach(function(p) { slot(p.control); });
+    approved.forEach(function(p) {
+      if (!inScope[p.target]) return;
+      var s = slot(p.control);
+      if (!s.seen[p.target]) { s.seen[p.target] = true; s.covered++; }
+    });
+    return Object.keys(out).map(function(k) {
+      var s = out[k];
+      delete s.seen;
+      s.coverage = s.services ? Math.round(s.covered / s.services * 100) : 0;
+      return s;
+    }).sort(function(a, b) { return a.coverage - b.coverage; });
+  },
+
+  // ids of the targets with at least one valid approved control
+  _coveredTargets: function() {
+    var ids = [];
+    var ga = this._approvedAggregate();
+    ga.groupBy('target');
+    ga.query();
+    while (ga.next()) ids.push(ga.getValue('target'));
+    return ids;
+  },
+
+  // (control, target) pairs of the active mappings, only the valid approved ones when asked
+  _pairs: function(onlyApproved) {
+    var pairs = [];
+    var ga = onlyApproved ? this._approvedAggregate() : new GlideAggregate(this.T.MAPPING);
+    if (!onlyApproved) { ga.addQuery('active', true); ga.addAggregate('COUNT'); }
+    ga.groupBy('control');
+    ga.groupBy('target');
+    ga.query();
+    while (ga.next()) pairs.push({ control: ga.getValue('control'), target: ga.getValue('target') });
+    return pairs;
+  },
+
+  // an aggregate on the active mappings that are approved and not past their date
+  _approvedAggregate: function() {
+    var ga = new GlideAggregate(this.T.MAPPING);
+    ga.addQuery('active', true);
+    ga.addQuery('state', this.S.APPROVED);
+    ga.addQuery('valid_until', '>=', this.util.today());
+    ga.addAggregate('COUNT');
+    return ga;
+  },
+
+  // ids of the active targets (any control)
+  _mappedTargets: function() {
+    var ids = [];
+    var ga = new GlideAggregate(this.T.MAPPING);
+    ga.addQuery('active', true);
+    ga.addAggregate('COUNT');
+    ga.groupBy('target');
+    ga.query();
+    while (ga.next()) ids.push(ga.getValue('target'));
+    return ids;
+  },
+
+  // which of these ids are services in scope: { id: true }
+  _servicesAmong: function(ids, scope) {
+    var found = {};
+    var unique = this.lookup.unique(ids);
+    for (var i = 0; i < unique.length; i += this.K.CHUNK) {
+      var gr = this._gr(this.T.SERVICE);
+      if (scope) gr.addEncodedQuery(scope);
+      gr.addQuery('sys_id', 'IN', unique.slice(i, i + this.K.CHUNK).join(','));
+      gr.query();
+      while (gr.next()) found[gr.getUniqueValue()] = true;
+    }
+    return found;
+  },
+
+  _countServices: function(scope) {
+    var ga = new GlideAggregate(this.T.SERVICE);
+    if (scope) ga.addEncodedQuery(scope);
+    ga.addAggregate('COUNT');
+    ga.query();
+    return ga.next() ? parseInt(ga.getAggregate('COUNT'), 10) : 0;
+  },
+
+  // counts the records matching a query
+  count: function(table, query) {
+    var ga = new GlideAggregate(table);
+    ga.addEncodedQuery(query);
+    ga.addAggregate('COUNT');
+    ga.query();
+    return ga.next() ? parseInt(ga.getAggregate('COUNT'), 10) : 0;
   },
 
   // ---------- Service cards ----------
 
-  // Role: the cards of the given targets (null = all of them), weakest first, plus the headline numbers.
-  posture: function(ids) {
+   // cards of the given targets (null = all), weakest first, plus the headline numbers. "light" skips the cards
+  posture: function(ids, ownerId, light) {
     if (ids && !ids.length) return { rows: [], kpi: this._kpi([]), truncated: false };
-    var counted = this._countByTarget(ids);
-    var rows = Object.keys(counted).map(function(id) { return this._finish(counted[id]); }, this);
+    var self = this;
+    var counted = this._countBy('target', ids, ownerId);
+    var rows = Object.keys(counted).map(function(id) { return self._finish(counted[id]); });
     var kpi = this._kpi(rows);
+    if (light) return { rows: [], kpi: kpi, truncated: false };
     var order = this.RISK_ORDER;
     rows.sort(function(a, b) { return (order[a.risk] - order[b.risk]) || (a.coverage - b.coverage); });
     var truncated = rows.length > this.MAX_CARDS;
@@ -40,65 +278,24 @@ CPMStats.prototype = {
     return { rows: rows, kpi: kpi, truncated: truncated };
   },
 
-  // Role: one aggregate query counts controls per target and state, a second one counts the ones expiring soon.
-  _countByTarget: function(ids) {
-    var rows = {};
-    var states = new GlideAggregate('x_1929776_compli_0_mapping');
-    states.addQuery('active', true);
-    if (ids) states.addQuery('target', 'IN', ids.join(','));
-    states.addAggregate('COUNT');
-    states.groupBy('target');
-    states.groupBy('state');
-    states.query();
-    while (states.next()) {
-      var id = states.getValue('target');
-      rows[id] = rows[id] || this._blank(id);
-      var key = states.getValue('state');
-      if (rows[id][key] === undefined) key = 'missing';   // an unexpected value counts as missing
-      rows[id][key] += parseInt(states.getAggregate('COUNT'), 10);
+  // the queries behind each follow-up list
+  _followSpecs: function(ownerId) {
+    var S = this.S;
+    var today = this.util.today();
+    var base = (ownerId ? 'owner=' + ownerId + '^' : '') + 'active=true';
+    var specs = {
+      need: { queries: [base + '^stateIN' + this.K.list(S.MISSING, S.REJECTED)], order: 'target', status: '' },
+      expiring: { queries: [base + '^state=' + S.APPROVED + '^valid_until>=' + today + '^valid_until<=' + this.util.horizon()],
+                  order: 'valid_until', status: this.V.EXPIRING },
+      stale: { queries: [base + '^state=' + S.EXPIRED, base + '^state=' + S.APPROVED + '^valid_until<' + today], order: 'target', status: S.EXPIRED }
+    };
+    if (!ownerId) {
+      specs.noOwner = { queries: ['active=true^ownerISEMPTY', 'active=true^ownerISNOTEMPTY^target.owned_byISEMPTY^target.managed_byISEMPTY'],
+                        order: 'target', status: '' };
     }
-
-    var soon = new GlideAggregate('x_1929776_compli_0_mapping');
-    soon.addQuery('active', true);
-    soon.addQuery('state', 'approved');
-    soon.addQuery('valid_until', '<=', this.util.horizon());
-    if (ids) soon.addQuery('target', 'IN', ids.join(','));
-    soon.addAggregate('COUNT');
-    soon.groupBy('target');
-    soon.query();
-    while (soon.next()) {
-      var sid = soon.getValue('target');
-      rows[sid] = rows[sid] || this._blank(sid);
-      rows[sid].expiring = parseInt(soon.getAggregate('COUNT'), 10);
-    }
-    return rows;
+    return specs;
   },
-
-  _blank: function(id) {
-    return { id: id, name: '', kind: '', approved: 0, awaiting: 0, rejected: 0, missing: 0, expired: 0, expiring: 0 };
-  },
-
-  // Role: adds the total, the coverage percentage and the traffic light to a row.
-  _finish: function(row) {
-    row.total = row.approved + row.awaiting + row.rejected + row.missing + row.expired;
-    row.coverage = row.total ? Math.round(row.approved / row.total * 100) : 0;
-    row.risk = this.util.riskFor(row.total, row.coverage);
-    return row;
-  },
-
-  // Role: the headline numbers over all rows.
-  _kpi: function(rows) {
-    var k = { targets: rows.length, total: 0, approved: 0, expiring: 0, awaiting: 0, rejected: 0, missing: 0, expired: 0, atRisk: 0, coverage: 0 };
-    rows.forEach(function(r) {
-      k.total += r.total; k.approved += r.approved; k.expiring += r.expiring; k.awaiting += r.awaiting;
-      k.rejected += r.rejected; k.missing += r.missing; k.expired += r.expired;
-      if (r.risk == 'red') k.atRisk++;
-    });
-    k.coverage = k.total ? Math.round(k.approved / k.total * 100) : 0;
-    return k;
-  },
-
-  // Role: looks up the names and kinds (Business Service, Server...) of the cards that will be displayed.
+// Role: looks up the names and kinds (Business Service, Server...) of the cards that will be displayed.
   _addNames: function(rows) {
     if (!rows.length) return;
     var byId = {};
@@ -111,247 +308,235 @@ CPMStats.prototype = {
       byId[ci.getUniqueValue()].kind = ci.getDisplayValue('sys_class_name');
     }
   },
-
-  // ---------- Follow-up lists ----------
-
-  // Role: the lists behind the headline numbers. For one person (ownerId given) it returns their own controls that
-  //       need evidence, are expiring soon, or are stale. For the compliance team (ownerId null) it returns the same
-  //       lists for the whole company, plus the controls without owner and the services without any control.
+  // lists behind the headline numbers: for one owner, or for the whole company (team only)
   followUp: function(ownerId, limit) {
-    var who = ownerId ? 'owner=' + ownerId + '^' : '';
-    var out = {
-      need: this._mappingList(who + 'active=true^stateINmissing,rejected', 'target', limit, ''),
-      expiring: this._mappingList(who + 'active=true^state=approved^valid_until<=' + this.util.horizon(), 'valid_until', limit, 'expiring'),
-      stale: this._mappingList(who + 'active=true^state=expired', 'target', limit, '')
-    };
-    if (!ownerId) {
-      out.noOwner = this._mappingList('active=true^ownerISEMPTY', 'target', limit, '');
-      out.uncovered = this.uncovered(limit);
-    }
+    if (!ownerId && !this.access.isAdmin()) ownerId = this.access.userId;
+    var self = this;
+    var specs = this._followSpecs(ownerId);
+    var out = {};
+    Object.keys(specs).forEach(function(key) {
+      out[key] = self._list(specs[key].queries, specs[key].order, limit, specs[key].status);
+    });
+    if (!ownerId) out.uncovered = this.uncovered(limit);
     return out;
   },
 
-  // Role: one list of controls matching a query: the total number, and the first rows (up to "limit").
-  _mappingList: function(query, orderField, limit, forceStatus) {
-    var out = { count: this.count('x_1929776_compli_0_mapping', query), items: [] };
-    var gr = new GlideRecord('x_1929776_compli_0_mapping');
-    gr.addEncodedQuery(query);
-    gr.orderBy(orderField);
-    gr.setLimit(limit);
-    gr.query();
+  // same shape as followUp, with the counts only (used on the service pages)
+  followCounts: function(ownerId) {
+    if (!ownerId && !this.access.isAdmin()) ownerId = this.access.userId;
+    var self = this;
+    var specs = this._followSpecs(ownerId);
+    var out = {};
+    Object.keys(specs).forEach(function(key) {
+      out[key] = { count: specs[key].queries.reduce(function(sum, q) { return sum + self.count(self.T.MAPPING, q); }, 0), items: [] };
+    });
+    if (!ownerId) out.uncovered = this.uncovered(0);
+    return out;
+  },
+
+  // one list from one or more queries: the real total and the first rows
+  _list: function(queries, orderField, limit, forceStatus) {
+    var self = this;
+    var raw = [];
+    var count = 0;
+    queries.forEach(function(query) {
+      count += self.count(self.T.MAPPING, query);
+      if (raw.length >= limit) return;
+      var gr = self._gr(self.T.MAPPING);
+      gr.addEncodedQuery(query);
+      gr.orderBy(orderField);
+      gr.setLimit(limit - raw.length);
+      gr.query();
+      while (gr.next()) {
+        raw.push({ target: gr.getValue('target'), control: gr.getValue('control'), owner: gr.getValue('owner') || '',
+                   state: gr.getValue('state'), until: gr.getValue('valid_until') || '' });
+      }
+    });
+    return { count: count, items: this._rows(raw, forceStatus) };
+  },
+
+  // list rows from raw mappings, names read in bulk. The team also gets an owner flag
+  _rows: function(raw, forceStatus) {
+    var self = this;
+    var isTeam = this.access.isAdmin();
+    var cis = this.lookup.byIds(this.T.CI, this._pluck(raw, 'target'), ['owned_by', 'managed_by']);
+    var controls = this.lookup.byIds(this.T.CONTROL, this._pluck(raw, 'control'), ['reference', 'name']);
+    var users = this.lookup.names(this.T.USER, this._pluck(raw, 'owner'));
     var today = this.util.today();
-    while (gr.next()) out.items.push(this._row(gr, today, forceStatus));
-    return out;
+    return raw.map(function(r) {
+      var ci = cis[r.target] || { _label: '(no target)', owned_by: '', managed_by: '' };
+      var control = controls[r.control] || { reference: '', name: '' };
+      var ciHasOwner = !!(ci.owned_by || ci.managed_by);
+      var flag = '';
+      if (isTeam && !r.owner) flag = self.msg.get(ciHasOwner ? 'cpm.flag.ci_not_synced' : 'cpm.flag.no_owner_ci');
+      else if (isTeam && !ciHasOwner) flag = self.msg.get('cpm.flag.fallback', [users[r.owner] || '']);
+      return {
+        targetId: r.target, target: ci._label, ref: control.reference, control: control.name,
+        status: forceStatus || r.state, owner: users[r.owner] || '', ownerFlag: flag,
+        until: r.until, daysLeft: r.until ? self.util.daysBetween(today, r.until) : null
+      };
+    });
   },
 
-  // Role: turns a mapping into one row of a list. When the control has no owner, the row says why:
-  //       the CI has no owner at all, or it has one and the control was not synchronised yet.
-  _row: function(gr, today, forceStatus) {
-    var until = gr.getValue('valid_until') || '';
-    var ownerId = gr.getValue('owner') || '';
-    var ciHasOwner = !!((gr.target.owned_by + '') || (gr.target.managed_by + ''));
-    var flag = '';
-    if (!ownerId) flag = ciHasOwner
-      ? 'The CI has an owner, but this control was not synchronised yet (it happens tonight).'
-      : 'No owner on the service or CI. Set "Owned by" in the CMDB.';
-    return {
-      targetId: gr.getValue('target'),
-      target: gr.target.getDisplayValue(),
-      ref: gr.control.reference + '',
-      control: gr.control.name + '',
-      status: forceStatus || gr.getValue('state'),
-      owner: gr.getDisplayValue('owner'),
-      ownerFlag: flag,
-      until: until,
-      daysLeft: until ? this.util.daysBetween(today, until) : null
-    };
-  },
-
-  // Role: business services that have no control at all. This is the "coverage gap" of the dashboard.
-  //       Each row says who owns the service, or flags that nobody does.
+  // services in scope with no valid approved evidence
   uncovered: function(limit) {
-    var mapped = {};
-    var ga = new GlideAggregate('x_1929776_compli_0_mapping');
-    ga.addQuery('active', true);
-    ga.addAggregate('COUNT');
-    ga.groupBy('target');
-    ga.query();
-    while (ga.next()) mapped[ga.getValue('target')] = true;
-
-    var out = { count: 0, items: [] };
-    var service = new GlideRecord('cmdb_ci_service');
     var scope = this.util.prop('service_scope', '');
+    var covered = this._servicesAmong(this._coveredTargets(), scope);
+    var count = Math.max(0, this._countServices(scope) - Object.keys(covered).length);
+    var out = { count: count, items: [] };
+    if (!count) return out;
+	if (!limit) return out;
+
+    var mapped = {};
+    this._mappedTargets().forEach(function(id) { mapped[id] = true; });
+    var service = this._gr(this.T.SERVICE);
     if (scope) service.addEncodedQuery(scope);
     service.orderBy('name');
     service.query();
-    while (service.next()) {
-      if (mapped[service.getUniqueValue()]) continue;
-      out.count++;
-      if (out.items.length >= limit) continue;
-      var owner = service.getDisplayValue('owned_by') || service.getDisplayValue('managed_by');
+    var ownerIds = [];
+    while (service.next() && out.items.length < limit) {
+      var id = service.getUniqueValue();
+      if (covered[id]) continue;
+      var ownerId = service.getValue('owned_by') || service.getValue('managed_by') || '';
+      ownerIds.push(ownerId);
       out.items.push({
-        targetId: service.getUniqueValue(),
-        target: service.getValue('name'),
-        ref: '',
-        control: '',
-        status: 'uncovered',
-        owner: owner,
-        ownerFlag: owner ? '' : 'No owner on the service. Set "Owned by" in the CMDB.',
-        until: '',
-        daysLeft: null
+        targetId: id, target: this.lookup.label(service) || '(unnamed service)', ref: '', control: '',
+        status: this.V.UNCOVERED, ownerId: ownerId, owner: '', ownerFlag: '', until: '', daysLeft: null,
+        note: mapped[id] ? 'Controls assigned, none approved yet.' : 'No control assigned yet.'
       });
     }
+    var users = this.lookup.names(this.T.USER, ownerIds);
+    var self = this;
+    out.items.forEach(function(item) {
+      item.owner = users[item.ownerId] || '';
+      item.ownerFlag = item.ownerId ? '' : self.msg.get('cpm.flag.no_owner_service');
+    });
     return out;
   },
 
   // ---------- Compliance team ----------
 
-  // Role: the review inbox, oldest submission first, with the file names. Only the compliance team gets a list.
+  // review inbox, oldest first, with file names
   inbox: function(limit) {
-    var out = [];
-    if (!this.access.isAdmin()) return out;
-    var today = this.util.today();
-    var gr = new GlideRecord('x_1929776_compli_0_evidence');
-    gr.addQuery('status', 'pending');
+    if (!this.access.isAdmin()) return [];
+    var raw = [];
+    var gr = this._gr(this.T.EVIDENCE);
+    gr.addQuery('status', this.ST.PENDING);
     gr.orderBy('submitted_on');
     gr.setLimit(limit);
     gr.query();
     while (gr.next()) {
-      var on = gr.getValue('submitted_on') || '';
-      out.push({
-        id: gr.getUniqueValue(),
-        number: gr.getValue('number'),
-        target: gr.mapping.target.getDisplayValue(),
-        control: gr.mapping.control.name + '',
-        guidance: gr.mapping.control.guidance + '',
-        renewal: (gr.mapping.state + '') == 'approved',
-        by: gr.getDisplayValue('submitted_by'),
-        on: on,
-        ageDays: on ? this.util.daysBetween(on.substring(0, 10), today) : 0,
-        canReview: gr.getValue('submitted_by') != gs.getUserID() || this.util.prop('allow_self_review', 'false') == 'true',
-        files: this._filesOf(gr.getUniqueValue())
-      });
+      raw.push({ id: gr.getUniqueValue(), number: gr.getValue('number'), mapping: gr.getValue('mapping'),
+                 by: gr.getValue('submitted_by') || '', on: gr.getValue('submitted_on') || '' });
     }
-    return out;
+    if (!raw.length) return [];
+
+    var self = this;
+    var mappings = this.lookup.byIds(this.T.MAPPING, this._pluck(raw, 'mapping'), ['target', 'control', 'state', 'valid_until']);
+    var targets = this.lookup.names(this.T.CI, this._pluckFrom(mappings, 'target'));
+    var controls = this.lookup.byIds(this.T.CONTROL, this._pluckFrom(mappings, 'control'), ['name', 'guidance']);
+    var users = this.lookup.names(this.T.USER, this._pluck(raw, 'by'));
+    var today = this.util.today();
+    var allowSelf = this.util.prop('allow_self_review', 'false') == 'true';
+    return raw.map(function(r) {
+      var m = mappings[r.mapping] || { target: '', control: '', state: '', valid_until: '' };
+      var control = controls[m.control] || { name: '', guidance: '' };
+      var shown = self.util.effective(m.state, m.valid_until);
+      return {
+        id: r.id, number: r.number, target: targets[m.target] || '', control: control.name, guidance: control.guidance,
+        renewal: shown == self.S.APPROVED || shown == self.V.EXPIRING, by: users[r.by] || '', on: r.on,
+        ageDays: r.on ? self.util.daysBetween(r.on.substring(0, 10), today) : 0,
+        canReview: r.by != gs.getUserID() || allowSelf,
+        files: self._filesOf(r.id)
+      };
+    });
   },
 
-  // Role: counts the records matching a query (pending submissions, controls without an owner...).
-  count: function(table, query) {
-    var ga = new GlideAggregate(table);
-    ga.addEncodedQuery(query);
-    ga.addAggregate('COUNT');
-    ga.query();
-    return ga.next() ? parseInt(ga.getAggregate('COUNT'), 10) : 0;
-  },
-
-  // Role: coverage per framework, weakest first. Answers "are we ready for ISO / SOC 2?".
-  frameworks: function() {
-    var label = {};
-    var control = new GlideRecord('x_1929776_compli_0_control');
-    control.query();
-    while (control.next()) label[control.getUniqueValue()] = control.getDisplayValue('framework') || 'Other';
-
-    var totals = {};
-    var ga = new GlideAggregate('x_1929776_compli_0_mapping');
-    ga.addQuery('active', true);
-    ga.addAggregate('COUNT');
-    ga.groupBy('control');
-    ga.groupBy('state');
-    ga.query();
-    while (ga.next()) {
-      var name = label[ga.getValue('control')] || 'Other';
-      var t = totals[name] = totals[name] || { name: name, total: 0, approved: 0 };
-      var n = parseInt(ga.getAggregate('COUNT'), 10);
-      t.total += n;
-      if (ga.getValue('state') == 'approved') t.approved += n;
-    }
-    return Object.keys(totals).map(function(k) {
-      var t = totals[k];
-      t.coverage = t.total ? Math.round(t.approved / t.total * 100) : 0;
-      return t;
-    }).sort(function(a, b) { return a.coverage - b.coverage; });
-  },
-
-  // Role: the audit export for the compliance team: every approved or superseded proof, with who approved it,
-  //       the scope frozen at approval, the files, and whether the integrity seal still matches.
+  // audit export: approved and superseded proofs with approver, frozen scope, files and seal check
   audit: function(limit) {
-    var rows = [];
-    if (!this.access.isAdmin()) return rows;
+    if (!this.access.isAdmin()) return [];
     var review = new CPMReview();
-    var gr = new GlideRecord('x_1929776_compli_0_evidence');
-    gr.addQuery('status', 'IN', 'approved,superseded');
+    var raw = [];
+    var gr = this._gr(this.T.EVIDENCE);
+    gr.addQuery('status', 'IN', this.K.list(this.ST.APPROVED, this.ST.SUPERSEDED));
     gr.orderByDesc('reviewed_on');
     gr.setLimit(limit);
     gr.query();
     while (gr.next()) {
-      var names = [];
-      var att = new GlideSysAttachment().getAttachments('x_1929776_compli_0_evidence', gr.getUniqueValue());
-      while (att.next()) names.push(att.getValue('file_name'));
-      rows.push({
-        number: gr.getValue('number'),
-        target: gr.mapping.target.getDisplayValue(),
-        ref: gr.mapping.control.reference + '',
-        control: gr.mapping.control.name + '',
-        framework: gr.mapping.control.framework.getDisplayValue(),
-        status: gr.getDisplayValue('status'),
-        submittedBy: gr.getDisplayValue('submitted_by'),
-        submittedOn: gr.getValue('submitted_on') || '',
-        reviewedBy: gr.getDisplayValue('reviewed_by'),
-        reviewedOn: gr.getValue('reviewed_on') || '',
-        validUntil: gr.getValue('valid_until') || '',
-        scope: gr.getValue('scope_snapshot') || '',
-        files: names.join('; '),
-        integrity: review.verify(gr)
+      var files = review.files(gr);
+      raw.push({
+        number: gr.getValue('number'), mapping: gr.getValue('mapping'), status: gr.getDisplayValue('status'),
+        submittedBy: gr.getValue('submitted_by') || '', submittedOn: gr.getValue('submitted_on') || '',
+        reviewedBy: gr.getValue('review_by') || '', reviewedOn: gr.getValue('reviewed_on') || '',
+        validUntil: gr.getValue('valid_until') || '', scope: gr.getValue('scope_snapshot') || '',
+        files: files.map(function(f) { return f.name; }).join('; '),
+        integrity: review.verify(gr, files)
       });
     }
-    return rows;
+    if (!raw.length) return [];
+
+    var mappings = this.lookup.byIds(this.T.MAPPING, this._pluck(raw, 'mapping'), ['target', 'control']);
+    var targets = this.lookup.names(this.T.CI, this._pluckFrom(mappings, 'target'));
+    var controls = this.lookup.byIds(this.T.CONTROL, this._pluckFrom(mappings, 'control'), ['reference', 'name'], ['framework']);
+    var users = this.lookup.names(this.T.USER, this._pluck(raw, 'submittedBy').concat(this._pluck(raw, 'reviewedBy')));
+    return raw.map(function(r) {
+      var m = mappings[r.mapping] || { target: '', control: '' };
+      var control = controls[m.control] || { reference: '', name: '', framework_dv: '' };
+      return {
+        number: r.number, target: targets[m.target] || '', ref: control.reference, control: control.name,
+        framework: control.framework_dv, status: r.status, submittedBy: users[r.submittedBy] || '',
+        submittedOn: r.submittedOn, reviewedBy: users[r.reviewedBy] || '', reviewedOn: r.reviewedOn,
+        validUntil: r.validUntil, scope: r.scope, files: r.files, integrity: r.integrity
+      };
+    });
   },
 
   // ---------- One CI or service ----------
 
-  // Role: everything the page of one CI or service shows: its numbers, each control, the components it is made of,
-  //       and the evidence history. The compliance team sees every control of the page, an owner only their own.
+  // everything the page of one CI or service shows. The team sees all controls, an owner only their own
   detail: function(targetId) {
-    var ci = new GlideRecord('cmdb_ci');
-    if (!ci.get(targetId)) return null;
+    var ci = this._gr(this.T.CI);
+    var found = ci.get(targetId);
+    var label = found ? '' : (this.lookup.namesFromMappings([targetId])[targetId] || '');
+    if (!found && !label) return null;
 
+    var self = this;
     var seesAll = this.access.isAdmin();
     var owned = {};
     if (!seesAll) this.access.ownedTargetIds().forEach(function(id) { owned[id] = true; });
-
     var history = this._evidenceByMapping(targetId, seesAll);
-    var horizon = this.util.horizon();
-    var controls = [];
-    var mapping = new GlideRecord('x_1929776_compli_0_mapping');
+
+    var raw = [];
+    var mapping = this._gr(this.T.MAPPING);
     mapping.addQuery('target', targetId);
     mapping.addQuery('active', true);
     if (!seesAll) mapping.addQuery('owner', this.access.userId);
     mapping.query();
     while (mapping.next()) {
-      var state = mapping.getValue('state');
-      var until = mapping.getValue('valid_until') || '';
-      var list = history[mapping.getUniqueValue()] || [];
-      var waiting = list.some(function(e) { return e.status == 'pending'; });   // a submission is with the team
-      var isOwner = this.access.isOwnerOf(mapping);                              // only the owner can upload
-      var open = this.evidence.canSubmit(state, until) && !waiting;              // and only when evidence is expected
-      controls.push({
-        id: mapping.getUniqueValue(),
-        ref: mapping.control.reference + '',
-        name: mapping.control.name + '',
-        framework: mapping.control.framework.getDisplayValue(),
-        description: mapping.control.description + '',
-        guidance: mapping.control.guidance + '',
-        status: (state == 'approved' && until && until <= horizon) ? 'expiring' : state,
-        until: until,
-        ownerId: mapping.getValue('owner') || '',
-        waiting: waiting,
-        canUpload: isOwner && open,
-        why: this._whyNot(isOwner, open, waiting, state, mapping),
-        renew: state == 'approved',
-        rejection: (list.length && list[0].status == 'rejected') ? list[0].comment : '',
-        evidence: list
-      });
+      raw.push({ id: mapping.getUniqueValue(), control: mapping.getValue('control'), state: mapping.getValue('state'),
+                 until: mapping.getValue('valid_until') || '', owner: mapping.getValue('owner') || '' });
     }
+    var defs = this.lookup.byIds(this.T.CONTROL, this._pluck(raw, 'control'), ['reference', 'name', 'description', 'guidance'], ['framework']);
+    var ownerNames = this.lookup.names(this.T.USER, this._pluck(raw, 'owner'));
+
+    var controls = raw.map(function(r) {
+      var def = defs[r.control] || { reference: '', name: '', description: '', guidance: '', framework_dv: '' };
+      var list = history[r.id] || [];
+      var shown = self.util.effective(r.state, r.until);
+      var waiting = list.some(function(e) { return e.status == self.ST.PENDING; });
+      var isOwner = !!r.owner && r.owner == self.access.userId;
+      var open = self.evidence.canSubmit(r.state, r.until) && !waiting;
+      return {
+        id: r.id, ref: def.reference, name: def.name, framework: def.framework_dv,
+        description: def.description, guidance: def.guidance,
+        status: shown, until: r.until, ownerId: r.owner, waiting: waiting,
+        canUpload: isOwner && open,
+        why: self._whyNot(isOwner, open, waiting, shown, ownerNames[r.owner] || '', r.until),
+        renew: shown == self.V.EXPIRING,
+        rejection: (list.length && list[0].status == self.ST.REJECTED) ? list[0].comment : '',
+        evidence: list
+      };
+    });
     var order = this.TODO_ORDER;
     controls.sort(function(a, b) {
       var wa = order[a.status] === undefined ? 9 : order[a.status];
@@ -359,13 +544,14 @@ CPMStats.prototype = {
       return (wa - wb) || a.ref.localeCompare(b.ref);
     });
 
-    var counts = this._countByTarget([targetId]);
-    var composition = this._composition(targetId, seesAll, owned);
+    var ownerFilter = seesAll ? '' : this.access.userId;
+    var counts = this._countBy('target', [targetId], ownerFilter);
+    var composition = this._composition(targetId, seesAll, owned, ownerFilter);
     return {
       id: targetId,
-      name: ci.getValue('name'),
-      kind: ci.getDisplayValue('sys_class_name'),
-      owner: ci.getDisplayValue('owned_by') || ci.getDisplayValue('managed_by'),
+      name: found ? this.lookup.label(ci) : label,
+      kind: found ? ci.getDisplayValue('sys_class_name') : '',
+      owner: found ? (ci.getDisplayValue('owned_by') || ci.getDisplayValue('managed_by')) : '',
       summary: this._finish(counts[targetId] || this._blank(targetId)),
       components: composition.items,
       rollup: composition.rollup,
@@ -374,9 +560,8 @@ CPMStats.prototype = {
     };
   },
 
-  // Role: the CIs this service is made of (from the CMDB relationships), each with its own control coverage.
-  //       A user only sees the coverage of the components they own; for the others only the name and the type.
-  _composition: function(targetId, seesAll, owned) {
+  // the CIs this service is made of, each with its own coverage (visible only for the user's own components)
+  _composition: function(targetId, seesAll, owned, ownerFilter) {
     var out = { items: [], rollup: { components: 0, total: 0, approved: 0, coverage: 0, uncovered: 0 } };
     var depthOf;
     try {
@@ -388,8 +573,8 @@ CPMStats.prototype = {
     var ids = Object.keys(depthOf);
     if (!ids.length) return out;
 
-    var counted = this._countByTarget(ids);
-    var ci = new GlideRecord('cmdb_ci');
+    var counted = this._countBy('target', ids, ownerFilter);
+    var ci = this._gr(this.T.CI);
     ci.addQuery('sys_id', 'IN', ids.join(','));
     ci.orderBy('name');
     ci.query();
@@ -397,7 +582,7 @@ CPMStats.prototype = {
       var id = ci.getUniqueValue();
       var visible = seesAll || !!owned[id];
       var row = visible ? this._finish(counted[id] || this._blank(id)) : this._blank(id);
-      row.name = ci.getValue('name');
+      row.name = this.lookup.label(ci);
       row.kind = ci.getDisplayValue('sys_class_name');
       row.owner = ci.getDisplayValue('owned_by') || ci.getDisplayValue('managed_by');
       row.depth = depthOf[id];
@@ -415,11 +600,11 @@ CPMStats.prototype = {
     return out;
   },
 
-  // Role: the services this CI is part of, because a control was applied to it "through" them. It explains why it is in scope.
+  // the services this CI is in scope through
   _partOf: function(targetId, seesAll, owned) {
     var out = [];
     var seen = {};
-    var gr = new GlideRecord('x_1929776_compli_0_mapping');
+    var gr = this._gr(this.T.MAPPING);
     gr.addQuery('target', targetId);
     gr.addQuery('active', true);
     gr.addNotNullQuery('via_service');
@@ -434,30 +619,26 @@ CPMStats.prototype = {
     return out;
   },
 
-  // Role: explains why a control has no upload area, so the page never leaves the user guessing.
-  _whyNot: function(isOwner, open, waiting, state, mapping) {
+  // why there is no upload area
+  _whyNot: function(isOwner, open, waiting, shown, ownerName, until) {
     if (isOwner && open) return '';
-    if (!isOwner) {
-      var owner = mapping.getDisplayValue('owner');
-      return owner
-        ? 'Only ' + owner + ' can upload evidence for this control.'
-        : 'This control has no owner yet, so nobody can upload evidence. Set an owner on the service or CI in the CMDB.';
+    if (!isOwner) return ownerName ? this.msg.get('cpm.why.only_owner', [ownerName]) : this.msg.get('cpm.why.no_owner');
+    if (waiting) return '';
+    if (shown == this.S.APPROVED && until) {
+      var from = this.util.addDays(until, -this.util.intProp('warning_days', 30));
+      return this.msg.get('cpm.why.renew_from', [until, from]);
     }
-    if (waiting) return '';   // the page already says "waiting for the compliance team"
-    if (state == 'approved') {
-      var from = this.util.addDays(mapping.getValue('valid_until'), -this.util.intProp('warning_days', 30));
-      return 'Approved until ' + mapping.getValue('valid_until') + '. You can send a renewal from ' + from + '.';
-    }
-    return 'Evidence cannot be added in the current state (' + state + ').';
+    return this.msg.get('cpm.why.state', [shown]);
   },
 
-  // Role: the last four submissions of each control of a target, newest first, in one query.
-  //       Drafts are private and left out. An owner only gets the evidence of the controls they own.
+  // last four submissions of each control of a target, newest first (drafts left out)
   _evidenceByMapping: function(targetId, seesAll) {
-    var map = {};
-    var gr = new GlideRecord('x_1929776_compli_0_evidence');
+    var review = new CPMReview();
+	var map = {};
+    var userIds = [];
+    var gr = this._gr(this.T.EVIDENCE);
     gr.addQuery('mapping.target', targetId);
-    gr.addQuery('status', '!=', 'draft');
+    gr.addQuery('status', '!=', this.ST.DRAFT);
     if (!seesAll) gr.addQuery('mapping.owner', this.access.userId);
     gr.orderByDesc('submitted_on');
     gr.setLimit(300);
@@ -466,28 +647,37 @@ CPMStats.prototype = {
       var key = gr.getValue('mapping');
       map[key] = map[key] || [];
       if (map[key].length >= 4) continue;
-      map[key].push({
+      var item = {
         id: gr.getUniqueValue(),
         number: gr.getValue('number'),
         status: gr.getValue('status'),
         label: gr.getDisplayValue('status'),
-        by: gr.getDisplayValue('submitted_by'),
+        byId: gr.getValue('submitted_by') || '',
         on: gr.getValue('submitted_on') || '',
-        reviewedBy: gr.getDisplayValue('reviewed_by'),
+        reviewedById: gr.getValue('review_by') || '',
         until: gr.getValue('valid_until') || '',
         scope: gr.getValue('scope_snapshot') || '',
-        sealed: !!gr.getValue('seal'),
-        comment: gr.getValue('status') == 'rejected' ? (gr.getValue('review_comment') || '') : '',
+        integrity: gr.getValue('seal') ? review.verify(gr) : 'none',
+        comment: gr.getValue('status') == this.ST.REJECTED ? (gr.getValue('review_comment') || '') : '',
         files: this._filesOf(gr.getUniqueValue())
-      });
+      };
+      userIds.push(item.byId, item.reviewedById);
+      map[key].push(item);
     }
+    var users = this.lookup.names(this.T.USER, userIds);
+    Object.keys(map).forEach(function(k) {
+      map[k].forEach(function(item) {
+        item.by = users[item.byId] || '';
+        item.reviewedBy = users[item.reviewedById] || '';
+      });
+    });
     return map;
   },
 
-  // Role: the files attached to one submission (names only: the content is fetched when someone opens a file).
+  // files of one submission (names only)
   _filesOf: function(evidenceId) {
     var files = [];
-    var att = new GlideSysAttachment().getAttachments('x_1929776_compli_0_evidence', evidenceId);
+    var att = new GlideSysAttachment().getAttachments(this.T.EVIDENCE, evidenceId);
     while (att.next()) {
       files.push({
         id: att.getUniqueValue(),
@@ -498,19 +688,40 @@ CPMStats.prototype = {
     return files;
   },
 
+    // plain read. Callers always filter by owner themselves. setWorkflow only on this app's own tables
+  _gr: function(table) {
+    var gr = new GlideRecord(table);
+    if (table.indexOf(this.K.PREFIX + '_') === 0) gr.setWorkflow(false);
+    return gr;
+  },
+
+  _rank: function(list) {
+    var out = {};
+    list.forEach(function(key, index) { out[key] = index; });
+    return out;
+  },
+
+  _pluck: function(list, key) {
+    return list.map(function(item) { return item[key]; });
+  },
+
+  _pluckFrom: function(map, key) {
+    return Object.keys(map).map(function(id) { return map[id][key]; });
+  },
+
   type: 'CPMStats'
 };]]></script>
         <sys_class_name>sys_script_include</sys_class_name>
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2026-10-25 13:45:37</sys_created_on>
         <sys_id>a2cb501373c05310a621f2024ab8b7f0</sys_id>
-        <sys_mod_count>14</sys_mod_count>
+        <sys_mod_count>30</sys_mod_count>
         <sys_name>CPMStats</sys_name>
         <sys_package display_value="Compliance Posture Mapper" source="x_1929776_compli_0">f7756d0a738c9310a621f2024ab8b707</sys_package>
         <sys_policy>read</sys_policy>
         <sys_scope display_value="Compliance Posture Mapper">f7756d0a738c9310a621f2024ab8b707</sys_scope>
         <sys_update_name>sys_script_include_a2cb501373c05310a621f2024ab8b7f0</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
-        <sys_updated_on>2026-10-27 23:51:16</sys_updated_on>
+        <sys_updated_on>2026-11-03 00:13:58</sys_updated_on>
     </sys_script_include>
 </record_update>

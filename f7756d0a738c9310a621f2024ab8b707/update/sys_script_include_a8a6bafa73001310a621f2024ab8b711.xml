@@ -9,35 +9,40 @@
         <mobile_callable>false</mobile_callable>
         <name>CPMAccess</name>
         <sandbox_callable>false</sandbox_callable>
-        <script><![CDATA[// Role: the ONLY place that decides who may see or do what. The app has no ACLs, so every screen and every
-//       action goes through these checks on the server.
-//       House rules: the compliance team (role x_1929776_compli_0.admin) sees everything and reviews evidence;
-//       an owner sees only the controls they own; only the OWNER of a control can upload evidence for it.
-var CPMAccess = Class.create();
+        <script><![CDATA[var CPMAccess = Class.create();
 CPMAccess.prototype = {
   initialize: function() {
+    this.K = new CPMConst();
+    this.T = this.K.TABLE;
+    this.util = new CPMUtil();
     this.userId = gs.getUserID();
+    this._admin = null;
   },
 
-  // Role: true for members of the compliance team.
+  // compliance team: has the role and, when "admin_group" is set, belongs to that group.
+  // gs.hasRole() alone is true for every system admin
   isAdmin: function() {
-    return gs.hasRole('x_1929776_compli_0.admin');
+    if (this._admin === null) {
+      var group = this.util.prop('admin_group', '');
+      this._admin = gs.hasRole(this.K.ROLE.ADMIN) && (!group || gs.getUser().isMemberOf(group));
+    }
+    return this._admin;
   },
 
-  // Role: is the current user the owner of this mapping? This is the only test for uploading, admins included.
+  // only the owner of a control can upload for it, admins included
   isOwnerOf: function(mapping) {
     return !!mapping.getValue('owner') && mapping.getValue('owner') == this.userId;
   },
 
-  // Role: may the current user look at this mapping and its evidence? The team always, owners only their own.
+  // the team sees everything, an owner only their own controls
   canSee: function(mapping) {
     return this.isAdmin() || this.isOwnerOf(mapping);
   },
 
-  // Role: the ids of the CIs and services the current user owns. Drives "I only see my own services".
+  // ids of the CIs and services the current user owns a control on
   ownedTargetIds: function() {
     var ids = [];
-    var ga = new GlideAggregate('x_1929776_compli_0_mapping');
+    var ga = new GlideAggregate(this.T.MAPPING);
     ga.addQuery('owner', this.userId);
     ga.addQuery('active', true);
     ga.addAggregate('COUNT');
@@ -47,12 +52,14 @@ CPMAccess.prototype = {
     return ids;
   },
 
-  // Role: may the current user open the page of this CI or service? The team always, owners only if they own a control on it.
+  // may the user open this page? The team always, an owner only with a control on it
   canViewTarget: function(targetId) {
     if (this.isAdmin()) return true;
-    var gr = new GlideRecord('x_1929776_compli_0_mapping');
+    var gr = new GlideRecord(this.T.MAPPING);
+    gr.setWorkflow(false);
     gr.addQuery('target', targetId);
     gr.addQuery('owner', this.userId);
+    gr.addQuery('active', true);
     gr.setLimit(1);
     gr.query();
     return gr.hasNext();
@@ -64,13 +71,13 @@ CPMAccess.prototype = {
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2026-10-24 11:45:05</sys_created_on>
         <sys_id>a8a6bafa73001310a621f2024ab8b711</sys_id>
-        <sys_mod_count>9</sys_mod_count>
+        <sys_mod_count>13</sys_mod_count>
         <sys_name>CPMAccess</sys_name>
         <sys_package display_value="Compliance Posture Mapper" source="x_1929776_compli_0">f7756d0a738c9310a621f2024ab8b707</sys_package>
         <sys_policy>read</sys_policy>
         <sys_scope display_value="Compliance Posture Mapper">f7756d0a738c9310a621f2024ab8b707</sys_scope>
         <sys_update_name>sys_script_include_a8a6bafa73001310a621f2024ab8b711</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
-        <sys_updated_on>2026-10-27 16:45:33</sys_updated_on>
+        <sys_updated_on>2026-11-01 23:13:33</sys_updated_on>
     </sys_script_include>
 </record_update>

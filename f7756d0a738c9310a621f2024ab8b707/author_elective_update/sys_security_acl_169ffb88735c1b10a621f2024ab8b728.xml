@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_security_acl">
+    <sys_security_acl action="DELETE">
+        <active>true</active>
+        <admin_overrides>false</admin_overrides>
+        <advanced>true</advanced>
+        <applies_to/>
+        <condition/>
+        <controlled_by_refs/>
+        <decision_type>allow</decision_type>
+        <description>Allow read for records in x_1929776_compli_0_control, if the ACL script returns true.</description>
+        <local_or_existing>Existing</local_or_existing>
+        <name>x_1929776_compli_0_control</name>
+        <operation display_value="read">read</operation>
+        <script><![CDATA[answer = gs.isLoggedIn();]]></script>
+        <security_attribute/>
+        <sys_class_name>sys_security_acl</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-10-28 14:23:04</sys_created_on>
+        <sys_id>169ffb88735c1b10a621f2024ab8b728</sys_id>
+        <sys_mod_count>4</sys_mod_count>
+        <sys_name>x_1929776_compli_0_control</sys_name>
+        <sys_package display_value="Compliance Posture Mapper" source="x_1929776_compli_0">f7756d0a738c9310a621f2024ab8b707</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Compliance Posture Mapper">f7756d0a738c9310a621f2024ab8b707</sys_scope>
+        <sys_update_name>sys_security_acl_169ffb88735c1b10a621f2024ab8b728</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-11-02 00:26:57</sys_updated_on>
+        <type display_value="record">record</type>
+    </sys_security_acl>
+    <sys_update_version action="INSERT_OR_UPDATE">
+        <action>DELETE</action>
+        <application display_value="Compliance Posture Mapper">f7756d0a738c9310a621f2024ab8b707</application>
+        <file_path/>
+        <instance_id>d0c76825ebca8b98e9bbfddacad0cd41</instance_id>
+        <instance_name>dev433816</instance_name>
+        <merge_base/>
+        <name>sys_security_acl_169ffb88735c1b10a621f2024ab8b728</name>
+        <payload>&lt;?xml version="1.0" encoding="UTF-8"?&gt;&lt;record_update table="sys_security_acl"&gt;&lt;sys_security_acl action="INSERT_OR_UPDATE"&gt;&lt;active&gt;true&lt;/active&gt;&lt;admin_overrides&gt;false&lt;/admin_overrides&gt;&lt;advanced&gt;true&lt;/advanced&gt;&lt;applies_to/&gt;&lt;condition/&gt;&lt;controlled_by_refs/&gt;&lt;decision_type&gt;allow&lt;/decision_type&gt;&lt;description&gt;Allow read for records in x_1929776_compli_0_control, if the ACL script returns true.&lt;/description&gt;&lt;local_or_existing&gt;Existing&lt;/local_or_existing&gt;&lt;name&gt;x_1929776_compli_0_control&lt;/name&gt;&lt;operation display_value="read"&gt;read&lt;/operation&gt;&lt;script&gt;&lt;![CDATA[answer = gs.isLoggedIn();]]&gt;&lt;/script&gt;&lt;security_attribute/&gt;&lt;sys_class_name&gt;sys_security_acl&lt;/sys_class_name&gt;&lt;sys_created_by&gt;admin&lt;/sys_created_by&gt;&lt;sys_created_on&gt;2026-10-28 14:23:04&lt;/sys_created_on&gt;&lt;sys_id&gt;169ffb88735c1b10a621f2024ab8b728&lt;/sys_id&gt;&lt;sys_mod_count&gt;4&lt;/sys_mod_count&gt;&lt;sys_name&gt;x_1929776_compli_0_control&lt;/sys_name&gt;&lt;sys_package display_value="Compliance Posture Mapper" source="x_1929776_compli_0"&gt;f7756d0a738c9310a621f2024ab8b707&lt;/sys_package&gt;&lt;sys_policy/&gt;&lt;sys_scope display_value="Compliance Posture Mapper"&gt;f7756d0a738c9310a621f2024ab8b707&lt;/sys_scope&gt;&lt;sys_update_name&gt;sys_security_acl_169ffb88735c1b10a621f2024ab8b728&lt;/sys_update_name&gt;&lt;sys_updated_by&gt;admin&lt;/sys_updated_by&gt;&lt;sys_updated_on&gt;2026-11-02 00:26:57&lt;/sys_updated_on&gt;&lt;type display_value="record"&gt;record&lt;/type&gt;&lt;/sys_security_acl&gt;&lt;/record_update&gt;</payload>
+        <payload_hash>-1554968419</payload_hash>
+        <record_name>x_1929776_compli_0_control</record_name>
+        <reverted_from/>
+        <source>e3b6bff3734c9710a621f2024ab8b7d6</source>
+        <source_table>sys_update_set</source_table>
+        <state>previous</state>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-11-02 00:26:57</sys_created_on>
+        <sys_id>f4d17ee173d01750a621f2024ab8b7ac</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_recorded_at>1a199a6f3f50000001</sys_recorded_at>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-11-02 00:26:57</sys_updated_on>
+        <type>Access Control</type>
+        <update_guid>f4d17ee101d017502a6d3090245064ab</update_guid>
+        <update_guid_history>f4d17ee101d017502a6d3090245064ab:-1554968419,11729c10ce105b1061cffd9cdfa7c281:-98573364,20309cd8fcdc1b1092876af5ceae9329:-1554968419,33314c5cf35c1b10cc911abaebfb3fd5:-624924369</update_guid_history>
+    </sys_update_version>
+    <sys_metadata_delete action="INSERT_OR_UPDATE">
+        <sys_audit_delete/>
+        <sys_class_name>sys_metadata_delete</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-11-02 21:44:57</sys_created_on>
+        <sys_db_object display_value="" name="sys_security_acl">sys_security_acl</sys_db_object>
+        <sys_id>7dbd86523fa447ff961c174ceefaef89</sys_id>
+        <sys_metadata>169ffb88735c1b10a621f2024ab8b728</sys_metadata>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>x_1929776_compli_0_control</sys_name>
+        <sys_package display_value="Compliance Posture Mapper" source="x_1929776_compli_0">f7756d0a738c9310a621f2024ab8b707</sys_package>
+        <sys_parent display_value="">cf4ef65673085710a621f2024ab8b7ae</sys_parent>
+        <sys_policy/>
+        <sys_scope display_value="Compliance Posture Mapper">f7756d0a738c9310a621f2024ab8b707</sys_scope>
+        <sys_scope_delete display_value="">01361efd492541088029ed23d04a1640</sys_scope_delete>
+        <sys_update_name>sys_security_acl_169ffb88735c1b10a621f2024ab8b728</sys_update_name>
+        <sys_update_version display_value="sys_security_acl_169ffb88735c1b10a621f2024ab8b728">f4d17ee173d01750a621f2024ab8b7ac</sys_update_version>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-11-02 21:44:57</sys_updated_on>
+    </sys_metadata_delete>
+</record_update>

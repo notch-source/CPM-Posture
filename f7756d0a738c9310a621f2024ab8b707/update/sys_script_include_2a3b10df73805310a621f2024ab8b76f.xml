@@ -9,99 +9,266 @@
         <mobile_callable>false</mobile_callable>
         <name>CPMMapping</name>
         <sandbox_callable>false</sandbox_callable>
-        <script><![CDATA[// Role: keeps the Mapping table in line with each control's "Targets" list (and, when asked, with the components
-//       of those targets), with the CMDB owners, and moves stale evidence to Expired. Nobody edits Mapping rows by hand.
-var CPMMapping = Class.create();
+        <script><![CDATA[var CPMMapping = Class.create();
 CPMMapping.prototype = {
   initialize: function() {
+    this.K = new CPMConst();
+    this.T = this.K.TABLE;
+    this.S = this.K.STATE;
+    this.ST = this.K.STATUS;
     this.util = new CPMUtil();
+    this.lookup = new CPMLookup();
+    this.msg = new CPMMsg();
   },
 
-  // Role: makes the mappings of one control match what the control asks for.
-  //       New targets get a Missing mapping, removed targets are deactivated (history is kept),
-  //       and every owner is brought in line with the CMDB.
-  syncControl: function(control) {
+  // makes the mappings of one control match its Targets (new = Missing, removed = deactivated).
+  // Each owner who received new mappings gets one email
+  syncControl: function(control, silent) {
     var wanted = this._wanted(control);
     var existing = this._existing(control);
     var controlId = control.getUniqueValue();
+    var fresh = {};
 
     for (var id in wanted) {
       var want = wanted[id];
       var have = existing[id];
-      if (!have) this._create(controlId, id, want);
-      else if (!have.active || have.owner !== want.owner || have.via !== want.via) this._update(have.id, true, want);
+      if (!have) {
+        this._create(controlId, id, want);
+        if (want.owner) fresh[want.owner] = true;
+        else gs.warn('[CPM] CI ' + id + ' has no owner and there is no fallback owner: the compliance team is alerted tonight.');
+      } else if (!have.active || have.owner !== want.owner || have.via !== want.via) {
+        this._update(have.id, true, want);
+      }
     }
     for (var other in existing) {
       if (!(other in wanted) && existing[other].active) this._update(existing[other].id, false, null);
     }
+    if (silent) return;   // the self-test sends no email
+    Object.keys(fresh).forEach(function(ownerId) { gs.eventQueue(this.K.EVENT.ASSIGNED, control, ownerId, ''); }, this);
   },
 
-  // Role: nightly. Copies the CMDB owner onto every active mapping, so a change of owner in the CMDB needs no action here.
-  //       A component without owner takes the owner of the service it was included through.
-  refreshOwners: function() {
-    var mapping = new GlideRecord('x_1929776_compli_0_mapping');
-    mapping.addQuery('active', true);
-    mapping.query();
-    while (mapping.next()) {
-      var owner = (mapping.target.owned_by + '') || (mapping.target.managed_by + '') ||
-                  (mapping.via_service.owned_by + '') || (mapping.via_service.managed_by + '') ||
-                  this.util.prop('fallback_owner', '');
-      if (owner !== (mapping.getValue('owner') || '')) {
-        mapping.setValue('owner', owner);
-        mapping.update();
-      }
+  // nightly safety net: syncs every control. Returns how many were checked
+  syncAllControls: function() {
+    var n = 0;
+    var gr = new GlideRecord(this.T.CONTROL);
+    gr.query();
+    while (gr.next()) { this.syncControl(gr); n++; }
+    return n;
+  },
+
+  // before saving: '' when the Targets list is fine, else the message to show
+  targetsProblem: function(control) {
+    var text = control.getValue('targets') || '';
+    if (!text) return '';
+    var max = 0;
+    try { max = control.targets.getED().getLength(); } catch (e) { max = 0; }
+    if (max > 0 && text.length > max) return this.msg.get('cpm.err.targets_too_long', [text.length, max]);
+    var K = this.K;
+    var bad = text.split(',').filter(String).filter(function(id) { return !K.isId(id); });
+    return bad.length ? this.msg.get('cpm.err.targets_incomplete', [bad[0]]) : '';
+  },
+
+    // summary shown under the Targets picker: types, owners, components, then one line per target
+  describeTargets: function(control) {
+    var ids = (control.getValue('targets') || '').split(',').filter(String);
+    if (!ids.length) return '';
+    var rows = this.lookup.byIds(this.T.CI, ids, [], ['sys_class_name', 'owned_by', 'managed_by']);
+    var withComponents = this.util.on(control.getValue('include_components'));
+    var scope = new CPMScope();
+    var byType = {};
+    var owners = {};
+    var components = {};
+    var noOwner = 0;
+    var notFound = 0;
+    var lines = [];
+
+    ids.forEach(function(id) {
+      var row = rows[id];
+      if (!row || row._missing) { notFound++; lines.push(id + ' (not found)'); return; }
+      var type = row.sys_class_name_dv || 'CI';
+      byType[type] = (byType[type] || 0) + 1;
+      var owner = row.owned_by_dv || row.managed_by_dv;
+      if (owner) owners[owner] = true; else noOwner++;
+      var found = withComponents ? Object.keys(scope.componentsOf(id)) : [];
+      found.forEach(function(cid) { components[cid] = true; });
+      lines.push(row._label + ' (' + type + ') · ' + (owner || 'no owner') + (withComponents ? ' · ' + found.length + ' component(s)' : ''));
+    });
+
+    var types = Object.keys(byType).map(function(t) { return byType[t] + ' ' + t; }).join(', ');
+    var head = [ids.length + ' target(s)' + (types ? ': ' + types : '') + (notFound ? ' · ' + notFound + ' not found' : '')];
+    head.push('Owners: ' + Object.keys(owners).length + ' named' + (noOwner ? ', ' + noOwner + ' target(s) without owner' : ''));
+
+    var extra = Object.keys(components).filter(function(id) { return ids.indexOf(id) < 0; });
+    if (withComponents) {
+      var comps = this.lookup.byIds(this.T.CI, extra, [], ['sys_class_name']);
+      var byClass = {};
+      extra.forEach(function(id) {
+        var kind = (comps[id] && comps[id].sys_class_name_dv) || 'CI';
+        byClass[kind] = (byClass[kind] || 0) + 1;
+      });
+      var kinds = Object.keys(byClass).map(function(k) { return byClass[k] + ' ' + k; }).join(', ');
+      head.push('Components included: ' + extra.length + (kinds ? ' (' + kinds + ')' : ''));
     }
+    head.push('Controls apply to ' + (ids.length - notFound + extra.length) + ' CI(s)');
+
+    var text = head.concat(lines).join('\n');
+    return text.length > 980 ? text.substring(0, 977) + '...' : text;
   },
 
-  // Role: nightly. Approved evidence whose date has passed becomes Expired.
-  //       If the owner already sent a renewal, the mapping goes back to Awaiting review instead.
-  expire: function() {
+  // copies the CMDB owner onto the active mappings (only those of "onlyCi" when given). Returns how many changed
+  refreshOwners: function(onlyCi) {
+    var mappings = [];
+    var ciIds = [];
+    var gr = new GlideRecord(this.T.MAPPING);
+    gr.addQuery('active', true);
+    if (onlyCi) {
+      var either = gr.addQuery('target', onlyCi);
+      either.addOrCondition('via_service', onlyCi);
+    }
+    gr.query();
+    while (gr.next()) {
+      var m = { id: gr.getUniqueValue(), target: gr.getValue('target'), via: gr.getValue('via_service') || '', owner: gr.getValue('owner') || '' };
+      mappings.push(m);
+      ciIds.push(m.target);
+      if (m.via) ciIds.push(m.via);
+    }
+    var owners = this.lookup.ownersOf(ciIds);
+    var fallback = this.util.prop('fallback_owner', '');
+
+    var changed = 0;
+    var self = this;
+    mappings.forEach(function(m) {
+      if (!(m.target in owners)) return;   // CI not readable: keep the current owner
+      var want = owners[m.target] || owners[m.via] || fallback;
+      if (want === m.owner) return;
+      var row = new GlideRecord(self.T.MAPPING);
+      if (!row.get(m.id)) return;
+      row.setValue('owner', want);
+      row.update();
+      changed++;
+    });
+    return changed;
+  },
+
+  // brings control states back in line with their evidence (all controls with "full"). Returns how many changed
+  syncStates: function(full) {
+    var ids = {};
+    if (full) {
+      this._collect(ids, '');
+    } else {
+      this._collect(ids, 'state=' + this.S.AWAITING);
+      this._collect(ids, 'state=' + this.S.APPROVED + '^valid_until<' + this.util.today());
+      var pending = this._pendingMappings();
+      for (var id in pending) ids[id] = true;
+    }
+    var changed = 0;
+    var self = this;
+    Object.keys(ids).forEach(function(id) {
+      if (self.refreshState(id)) changed++;
+    });
+    return changed;
+  },
+
+  // recomputes the state of one control from its evidence. Returns true when it changed
+  refreshState: function(mappingId) {
+    var mapping = new GlideRecord(this.T.MAPPING);
+    if (!mapping.get(mappingId)) return false;
+    var want = this.stateOf(mappingId);
+    if (mapping.getValue('state') == want.state && (mapping.getValue('valid_until') || '') == want.until) return false;
+    mapping.setValue('state', want.state);
+    mapping.setValue('valid_until', want.until);
+    mapping.update();
+    return true;
+  },
+
+  // THE rule: valid approval > waiting submission > latest decision > missing
+  stateOf: function(mappingId) {
+    var S = this.S;
+    var approved = this._latestApproved(mappingId);
+    if (approved && (!approved.until || approved.until >= this.util.today())) return { state: S.APPROVED, until: approved.until };
+    if (this._hasPending(mappingId)) return { state: S.AWAITING, until: '' };
+    var last = this._latestDecision(mappingId);
+    if (!last) return { state: S.MISSING, until: '' };
+    if (last.status == this.ST.REJECTED) return { state: S.REJECTED, until: '' };
+    return { state: S.EXPIRED, until: approved ? approved.until : last.until };
+  },
+
+  _latestApproved: function(mappingId) {
+    var gr = new GlideRecord(this.T.EVIDENCE);
+    gr.addQuery('mapping', mappingId);
+    gr.addQuery('status', this.ST.APPROVED);
+    gr.orderByDesc('valid_until');
+    gr.setLimit(1);
+    gr.query();
+    return gr.next() ? { until: gr.getValue('valid_until') || '' } : null;
+  },
+
+  _latestDecision: function(mappingId) {
+    var gr = new GlideRecord(this.T.EVIDENCE);
+    gr.addQuery('mapping', mappingId);
+    gr.addQuery('status', 'IN', this.K.list(this.ST.APPROVED, this.ST.REJECTED));
+    gr.orderByDesc('reviewed_on');
+    gr.orderByDesc('sys_updated_on');
+    gr.setLimit(1);
+    gr.query();
+    return gr.next() ? { status: gr.getValue('status'), until: gr.getValue('valid_until') || '' } : null;
+  },
+
+  _hasPending: function(mappingId) {
+    var gr = new GlideRecord(this.T.EVIDENCE);
+    gr.addQuery('mapping', mappingId);
+    gr.addQuery('status', this.ST.PENDING);
+    gr.setLimit(1);
+    gr.query();
+    return gr.hasNext();
+  },
+
+  _collect: function(ids, query) {
+    var gr = new GlideRecord(this.T.MAPPING);
+    gr.addQuery('active', true);
+    if (query) gr.addEncodedQuery(query);
+    gr.query();
+    while (gr.next()) ids[gr.getUniqueValue()] = true;
+  },
+
+  _pendingMappings: function() {
     var pending = {};
-    var evidence = new GlideAggregate('x_1929776_compli_0_evidence');
-    evidence.addQuery('status', 'pending');
-    evidence.addAggregate('COUNT');
-    evidence.groupBy('mapping');
-    evidence.query();
-    while (evidence.next()) pending[evidence.getValue('mapping')] = true;
-
-    var mapping = new GlideRecord('x_1929776_compli_0_mapping');
-    mapping.addQuery('state', 'approved');
-    mapping.addQuery('valid_until', '<', this.util.today());
-    mapping.query();
-    while (mapping.next()) {
-      mapping.setValue('state', pending[mapping.getUniqueValue()] ? 'awaiting' : 'expired');
-      mapping.update();
-    }
+    var ga = new GlideAggregate(this.T.EVIDENCE);
+    ga.addQuery('status', this.ST.PENDING);
+    ga.addAggregate('COUNT');
+    ga.groupBy('mapping');
+    ga.query();
+    while (ga.next()) pending[ga.getValue('mapping')] = true;
+    return pending;
   },
 
-  // Role: everything a control should apply to, as { ciId: { owner, via } }.
-  //       "via" is empty for a target picked by the admin, and holds the service id for a component added automatically.
+  // everything a control applies to: { ciId: { owner, via } } (via = service id for a component)
   _wanted: function(control) {
     var wanted = {};
-    var list = control.getValue('active') == '1' ? (control.getValue('targets') || '') : '';
-    var ids = list.split(',').filter(String);
+    var list = this.util.on(control.getValue('active')) ? (control.getValue('targets') || '') : '';
+    var K = this.K;
+    var ids = list.split(',').filter(function(id) { return K.isId(id); });
     if (!ids.length) return wanted;
 
     var targetOwner = {};
-    var ci = new GlideRecord('cmdb_ci');
+    var ci = new GlideRecord(this.T.CI);
     ci.addQuery('sys_id', 'IN', ids.join(','));
     ci.query();
     while (ci.next()) {
       targetOwner[ci.getUniqueValue()] = this.util.ownerOf(ci) || '';
       wanted[ci.getUniqueValue()] = { owner: targetOwner[ci.getUniqueValue()], via: '' };
     }
-    if (control.getValue('include_components') == '1') this._addComponents(wanted, targetOwner);
+    if (this.util.on(control.getValue('include_components'))) this._addComponents(wanted, targetOwner);
     return wanted;
   },
 
-  // Role: adds the components of every target (found through the CMDB relationships) to the wanted list.
-  //       A CI that is already wanted keeps its first reason. A component without owner inherits the service owner.
+  // adds the components of each target; a component without owner takes the service owner
   _addComponents: function(wanted, targetOwner) {
     var scope = new CPMScope();
     for (var targetId in targetOwner) {
       var ids = Object.keys(scope.componentsOf(targetId)).filter(function(id) { return !wanted[id]; });
       if (!ids.length) continue;
-      var ci = new GlideRecord('cmdb_ci');
+      var ci = new GlideRecord(this.T.CI);
       ci.addQuery('sys_id', 'IN', ids.join(','));
       ci.query();
       while (ci.next()) {
@@ -112,16 +279,15 @@ CPMMapping.prototype = {
     }
   },
 
-  // Role: the mappings that already exist for a control, as { ciId: { id, active, owner, via } }.
   _existing: function(control) {
     var map = {};
-    var mapping = new GlideRecord('x_1929776_compli_0_mapping');
+    var mapping = new GlideRecord(this.T.MAPPING);
     mapping.addQuery('control', control.getUniqueValue());
     mapping.query();
     while (mapping.next()) {
       map[mapping.getValue('target')] = {
         id: mapping.getUniqueValue(),
-        active: mapping.getValue('active') == '1',
+        active: this.util.on(mapping.getValue('active')),
         owner: mapping.getValue('owner') || '',
         via: mapping.getValue('via_service') || ''
       };
@@ -129,22 +295,20 @@ CPMMapping.prototype = {
     return map;
   },
 
-  // Role: creates a blank mapping. Its first state is Missing: the owner has to provide evidence.
   _create: function(controlId, targetId, want) {
-    var mapping = new GlideRecord('x_1929776_compli_0_mapping');
+    var mapping = new GlideRecord(this.T.MAPPING);
     mapping.initialize();
     mapping.setValue('control', controlId);
     mapping.setValue('target', targetId);
     mapping.setValue('owner', want.owner);
     mapping.setValue('via_service', want.via);
-    mapping.setValue('state', 'missing');
+    mapping.setValue('state', this.S.MISSING);
     mapping.setValue('active', true);
-    mapping.insert();
+    if (!mapping.insert()) gs.warn('[CPM] mapping not created for CI ' + targetId + ' on control ' + controlId + ' (duplicate, or refused by a rule).');
   },
 
-  // Role: switches a mapping on or off, and when "want" is given, refreshes its owner and its reason for being there.
   _update: function(mappingId, active, want) {
-    var mapping = new GlideRecord('x_1929776_compli_0_mapping');
+    var mapping = new GlideRecord(this.T.MAPPING);
     if (!mapping.get(mappingId)) return;
     mapping.setValue('active', active);
     if (want) {
@@ -160,13 +324,13 @@ CPMMapping.prototype = {
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2026-10-25 13:43:00</sys_created_on>
         <sys_id>2a3b10df73805310a621f2024ab8b76f</sys_id>
-        <sys_mod_count>6</sys_mod_count>
+        <sys_mod_count>14</sys_mod_count>
         <sys_name>CPMMapping</sys_name>
         <sys_package display_value="Compliance Posture Mapper" source="x_1929776_compli_0">f7756d0a738c9310a621f2024ab8b707</sys_package>
         <sys_policy>read</sys_policy>
         <sys_scope display_value="Compliance Posture Mapper">f7756d0a738c9310a621f2024ab8b707</sys_scope>
         <sys_update_name>sys_script_include_2a3b10df73805310a621f2024ab8b76f</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
-        <sys_updated_on>2026-10-27 23:49:08</sys_updated_on>
+        <sys_updated_on>2026-11-04 09:17:15</sys_updated_on>
     </sys_script_include>
 </record_update>

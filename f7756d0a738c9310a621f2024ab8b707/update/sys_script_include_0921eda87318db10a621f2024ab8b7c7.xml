@@ -1,0 +1,131 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_1929776_compli_0.CPMLookup</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description/>
+        <mobile_callable>false</mobile_callable>
+        <name>CPMLookup</name>
+        <sandbox_callable>false</sandbox_callable>
+        <script><![CDATA[var CPMLookup = Class.create();
+CPMLookup.prototype = {
+  initialize: function() {
+    this.K = new CPMConst();
+  },
+
+  // Reads many records in few queries: { id: { _label, field: value, field_dv: display value } }.
+  // A CI that cannot be read gets its name from the mappings, else "CI …id".
+  byIds: function(table, ids, fields, display) {
+    var out = {};
+    var self = this;
+    var unique = this.unique(ids);
+    for (var i = 0; i < unique.length; i += this.K.CHUNK) {
+      var gr = this._open(table);
+      gr.addQuery('sys_id', 'IN', unique.slice(i, i + this.K.CHUNK).join(','));
+      gr.query();
+      while (gr.next()) {
+        var row = { _label: self.label(gr) };
+        fields.forEach(function(field) { row[field] = gr.getValue(field) || ''; });
+        (display || []).forEach(function(field) { row[field + '_dv'] = gr.getDisplayValue(field) || ''; });
+        out[gr.getUniqueValue()] = row;
+      }
+    }
+    if (table === this.K.TABLE.CI) this._fillMissing(out, unique, fields, display);
+    return out;
+  },
+
+  // { id: label }
+  names: function(table, ids) {
+    var rows = this.byIds(table, ids, [], null);
+    var out = {};
+    for (var id in rows) out[id] = rows[id]._label;
+    return out;
+  },
+
+  // { ciId: ownerId } for the CIs that could be read (an unreadable CI is left out on purpose)
+  ownersOf: function(ids) {
+    var out = {};
+    var unique = this.unique(ids);
+    for (var i = 0; i < unique.length; i += this.K.CHUNK) {
+      var gr = this._open(this.K.TABLE.CI);
+      gr.addQuery('sys_id', 'IN', unique.slice(i, i + this.K.CHUNK).join(','));
+      gr.query();
+      while (gr.next()) out[gr.getUniqueValue()] = gr.getValue('owned_by') || gr.getValue('managed_by') || '';
+    }
+    return out;
+  },
+
+  // { ciId: name } read through the mappings (the platform resolves the reference itself)
+  namesFromMappings: function(ids) {
+    var out = {};
+    var unique = this.unique(ids);
+    for (var i = 0; i < unique.length; i += this.K.CHUNK) {
+      var gr = this._open(this.K.TABLE.MAPPING);
+      gr.addQuery('target', 'IN', unique.slice(i, i + this.K.CHUNK).join(','));
+      gr.query();
+      while (gr.next()) {
+        var id = gr.getValue('target');
+        if (!out[id]) out[id] = gr.getDisplayValue('target') || '';
+      }
+    }
+    return out;
+  },
+
+  // a readable label: display value, else name, else class and end of the id
+  label: function(gr) {
+    var text = gr.getDisplayValue() || (gr.isValidField('name') ? gr.getValue('name') : '');
+    if (!text && gr.isValidField('sys_class_name')) text = gr.getDisplayValue('sys_class_name') + ' …' + gr.getUniqueValue().substring(26);
+    return text || '';
+  },
+
+  // removes empty and repeated ids
+  unique: function(ids) {
+    var seen = {};
+    return (ids || []).filter(function(id) {
+      if (!id || seen[id]) return false;
+      seen[id] = true;
+      return true;
+    });
+  },
+
+  // opens a table. setWorkflow is only allowed on this app's own tables
+  _open: function(table) {
+    var gr = new GlideRecord(table);
+    if (table.indexOf(this.K.PREFIX + '_') === 0) gr.setWorkflow(false);
+    return gr;
+  },
+
+  // gives every CI that was not read a row: name from the mappings, else "CI …id" (_missing = true)
+  _fillMissing: function(out, unique, fields, display) {
+    var missing = unique.filter(function(id) { return !out[id]; });
+    if (!missing.length) return;
+    var names = this.namesFromMappings(missing);
+    var viaMapping = 0;
+    missing.forEach(function(id) {
+      var row = { _label: names[id] || 'CI …' + id.substring(26), _missing: !names[id] };
+      fields.forEach(function(field) { row[field] = ''; });
+      (display || []).forEach(function(field) { row[field + '_dv'] = ''; });
+      out[id] = row;
+      if (names[id]) viaMapping++;
+    });
+    if (viaMapping) gs.warn('[CPM] ' + viaMapping + ' CI(s) not readable directly by ' + gs.getUserName() + ' (e.g. ' + missing[0] + '): names taken from the mappings.');
+  },
+
+  type: 'CPMLookup'
+};]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2026-10-29 16:01:18</sys_created_on>
+        <sys_id>0921eda87318db10a621f2024ab8b7c7</sys_id>
+        <sys_mod_count>8</sys_mod_count>
+        <sys_name>CPMLookup</sys_name>
+        <sys_package display_value="Compliance Posture Mapper" source="x_1929776_compli_0">f7756d0a738c9310a621f2024ab8b707</sys_package>
+        <sys_policy>read</sys_policy>
+        <sys_scope display_value="Compliance Posture Mapper">f7756d0a738c9310a621f2024ab8b707</sys_scope>
+        <sys_update_name>sys_script_include_0921eda87318db10a621f2024ab8b7c7</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2026-10-31 10:05:31</sys_updated_on>
+    </sys_script_include>
+</record_update>
