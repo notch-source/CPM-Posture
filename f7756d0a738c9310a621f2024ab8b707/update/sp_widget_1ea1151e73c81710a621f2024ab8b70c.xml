@@ -1228,23 +1228,16 @@ button.cpm-kpi { font: inherit; color: inherit; text-align: left; width: 100%; d
         <sys_created_by>admin</sys_created_by>
         <sys_created_on>2026-10-22 15:09:33</sys_created_on>
         <sys_id>1ea1151e73c81710a621f2024ab8b70c</sys_id>
-        <sys_mod_count>83</sys_mod_count>
+        <sys_mod_count>84</sys_mod_count>
         <sys_name>CPM Compliance</sys_name>
         <sys_package display_value="Compliance Posture Mapper" source="x_1929776_compli_0">f7756d0a738c9310a621f2024ab8b707</sys_package>
         <sys_policy/>
         <sys_scope display_value="Compliance Posture Mapper">f7756d0a738c9310a621f2024ab8b707</sys_scope>
         <sys_update_name>sp_widget_1ea1151e73c81710a621f2024ab8b70c</sys_update_name>
         <sys_updated_by>admin</sys_updated_by>
-        <sys_updated_on>2026-11-04 23:26:07</sys_updated_on>
+        <sys_updated_on>2026-11-05 10:33:57</sys_updated_on>
         <template><![CDATA[<div class="cpm">
 
-  <div class="cpm-alert" ng-if="!c.build">
-    The <b>Client script</b> is not running. Replace the whole field, keep <b>Link</b> empty, check that <b>Controller as</b> is <code>c</code>,
-    save, then open /cache.do and press Ctrl+F5.
-  </div>
-  <div class="cpm-alert" ng-if="c.build && data.serverBuild != c.build">
-    The <b>Script Includes</b> are out of date: server build {{data.serverBuild || 'unknown'}}, page build {{c.build}}. Replace them with the latest code.
-  </div>
   <div class="cpm-alert" ng-if="data.health.length">
     <b>Setup check</b> (only the compliance team sees this):
     <ul><li ng-repeat="p in data.health track by $index">{{p}}</li></ul>
@@ -1690,14 +1683,12 @@ button.cpm-kpi { font: inherit; color: inherit; text-align: left; width: 100%; d
           </section>
         </aside>
       </div>
-
-      <div class="cpm-foot">widget build {{c.build || '?'}} · server build {{data.serverBuild || '?'}}</div>
     </div>
   </div>
 
   <div class="cpm-lightbox" role="dialog" aria-modal="true" aria-label="Image viewer" ng-if="c.preview" ng-click="c.preview = null">
     <img ng-src="{{c.preview.src}}" alt="{{c.preview.name}}">
-    <div>{{c.preview.name}} · click or press Esc to close</div>
+    <div>{{c.preview.name}} · Esc to close</div>
   </div>
 </div>]]></template>
     </sp_widget>
